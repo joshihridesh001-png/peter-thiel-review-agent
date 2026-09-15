@@ -36,6 +36,9 @@ COGS = [
 ]
 
 
+from config import DISCORD_BOT_TOKEN, PRIMARY_GOALS_CHANNEL_ID, TIMEZONE
+
+
 @bot.event
 async def on_ready():
     logger.info(f"🚀 Bot connected as {bot.user} (ID: {bot.user.id})")
@@ -50,11 +53,30 @@ async def on_ready():
     except Exception as e:
         logger.error(f"Failed to sync slash commands: {e}")
 
+    # Send test deployment confirmation embed to Discord
+    try:
+        channel = bot.get_channel(PRIMARY_GOALS_CHANNEL_ID)
+        if channel:
+            embed = discord.Embed(
+                title="☁️ Peter Thiel: Cloud Deployment Live",
+                description=(
+                    "**Status:** 🟢 **Online from Render Cloud**\n"
+                    "**Architecture:** Docker Container • Port 10000 (/healthz)\n"
+                    "**Timezone:** Asia/Kolkata (IST)\n\n"
+                    "*\"The test deployment from Render succeeded. Continuous 24/7 monitoring is active.\"*"
+                ),
+                color=0x2ECC71,
+            )
+            embed.set_footer(text="Render.com • Automated Cloud Health Verified")
+            await channel.send(embed=embed)
+            logger.info("Sent cloud deployment test message to Discord.")
+    except Exception as e:
+        logger.error(f"Failed to send startup test message: {e}")
+
 
 import os
 from datetime import datetime
 from aiohttp import web
-from config import TIMEZONE
 
 
 async def handle_health(request):
@@ -91,7 +113,21 @@ async def main():
             except Exception as e:
                 logger.error(f"Failed to load cog {cog}: {e}")
 
-        await bot.start(DISCORD_BOT_TOKEN)
+        # Start bot with backoff retry on Discord 429 rate limit
+        while True:
+            try:
+                await bot.start(DISCORD_BOT_TOKEN)
+                break
+            except discord.errors.HTTPException as e:
+                if e.status == 429:
+                    logger.warning("⚠️ Discord 429 rate limit encountered. Waiting 35s before retrying...")
+                    await asyncio.sleep(35)
+                else:
+                    logger.error(f"Discord HTTP Exception ({e.status}): {e}. Waiting 15s...")
+                    await asyncio.sleep(15)
+            except Exception as e:
+                logger.error(f"Connection error: {e}. Retrying in 15s...")
+                await asyncio.sleep(15)
 
 
 if __name__ == "__main__":
