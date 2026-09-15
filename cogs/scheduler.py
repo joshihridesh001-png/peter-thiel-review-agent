@@ -22,6 +22,7 @@ from config import (
     WEEKLY_SWOT_HOUR,
     MONTHLY_CLOSE_DAY,
     MONTHLY_CLOSE_HOUR,
+    TIMEZONE,
 )
 from database.models import (
     get_all_users,
@@ -63,7 +64,7 @@ class SchedulerCog(commands.Cog):
     @tasks.loop(minutes=1)
     async def chronos_loop(self):
         """Heartbeat loop checked every 60 seconds."""
-        now = datetime.now()
+        now = datetime.now(TIMEZONE)
         today_str = now.strftime("%Y-%m-%d")
         month_str = now.strftime("%Y-%m")
 
@@ -199,7 +200,7 @@ class SchedulerCog(commands.Cog):
         if not channel:
             return
 
-        end_date = datetime.now().date()
+        end_date = datetime.now(TIMEZONE).date()
         start_date = end_date - timedelta(days=6)
 
         weekly_payload = {}

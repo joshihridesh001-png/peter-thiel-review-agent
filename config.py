@@ -6,12 +6,23 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
+import zoneinfo
+
 # Load .env if present
 load_dotenv()
 
+# Timezone (defaults to Asia/Kolkata for IST schedule)
+TIMEZONE_STR = os.getenv("TZ", "Asia/Kolkata")
+try:
+    TIMEZONE = zoneinfo.ZoneInfo(TIMEZONE_STR)
+except Exception:
+    TIMEZONE = zoneinfo.ZoneInfo("Asia/Kolkata")
+
 # Base directories
 BASE_DIR = Path(__file__).resolve().parent
-DB_PATH = BASE_DIR / "founder_ops.db"
+DATA_DIR = Path(os.getenv("DATA_DIR", str(BASE_DIR)))
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+DB_PATH = DATA_DIR / "founder_ops.db"
 
 # Discord Bot Token (falls back to existing skill default token if not in env)
 DISCORD_BOT_TOKEN = os.getenv(

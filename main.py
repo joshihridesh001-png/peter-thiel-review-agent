@@ -51,7 +51,38 @@ async def on_ready():
         logger.error(f"Failed to sync slash commands: {e}")
 
 
+import os
+from datetime import datetime
+from aiohttp import web
+from config import TIMEZONE
+
+
+async def handle_health(request):
+    return web.json_response({
+        "status": "ok",
+        "agent": "Peter Thiel",
+        "bot_online": bot.is_ready(),
+        "server_time_ist": datetime.now(TIMEZONE).isoformat()
+    })
+
+
+async def run_web_server():
+    """Start lightweight HTTP health server on $PORT for Render / cloud keep-alive."""
+    app = web.Application()
+    app.router.add_get("/", handle_health)
+    app.router.add_get("/healthz", handle_health)
+    app.router.add_get("/health", handle_health)
+
+    port = int(os.getenv("PORT", "10000"))
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+    logger.info(f"🌐 Healthcheck web server listening on 0.0.0.0:{port} (/healthz)")
+
+
 async def main():
+    await run_web_server()
     async with bot:
         for cog in COGS:
             try:
