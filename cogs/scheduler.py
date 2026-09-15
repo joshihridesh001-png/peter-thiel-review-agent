@@ -1,0 +1,322 @@
+"""
+Discord Cog: Scheduler
+Runs 24/7 background tasks:
+- 8:00 PM: Daily scoring calculation, Praise & Bottlenecks digest
+- 9:00 PM: Tomorrow's Goal Setting prompt
+- Sunday 9:00 PM: Weekly Executive SWOT Report
+- 1st of Month 10:00 AM: Monthly Dynamic Earnout Ledger
+"""
+
+import discord
+from discord.ext import commands, tasks
+from datetime import datetime, timedelta
+import logging
+
+from config import (
+    PRIMARY_GOALS_CHANNEL_ID,
+    LEADERSHIP_CHANNEL_ID,
+    FOUNDERS,
+    DAILY_SCORING_HOUR,
+    DAILY_GOALS_HOUR,
+    WEEKLY_SWOT_DAY,
+    WEEKLY_SWOT_HOUR,
+    MONTHLY_CLOSE_DAY,
+    MONTHLY_CLOSE_HOUR,
+)
+from database.models import (
+    get_all_users,
+    get_goals_for_date,
+    get_updates_for_date_range,
+    get_reactions_for_messages,
+    save_daily_score,
+    get_scores_in_date_range,
+    record_monthly_equity_tranche,
+    get_latest_equity_status,
+)
+from engine.evaluator import evaluate_daily_execution_with_ai
+from engine.scoring import compute_daily_score
+from engine.swot import generate_weekly_swot_with_ai
+from engine.equity import compute_monthly_equity_split
+from skills_bridge.discord_bridge import (
+    COLOR_SUCCESS,
+    COLOR_PRIMARY,
+    COLOR_WARNING,
+    COLOR_EQUITY,
+    COLOR_SWOT,
+)
+
+logger = logging.getLogger(__name__)
+
+
+class SchedulerCog(commands.Cog):
+    def __init__(self, bot: commands.Bot):
+        self.bot = bot
+        self.last_scored_date = ""
+        self.last_prompted_goals_date = ""
+        self.last_swot_date = ""
+        self.last_equity_month = ""
+        self.chronos_loop.start()
+
+    def cog_unload(self):
+        self.chronos_loop.cancel()
+
+    @tasks.loop(minutes=1)
+    async def chronos_loop(self):
+        """Heartbeat loop checked every 60 seconds."""
+        now = datetime.now()
+        today_str = now.strftime("%Y-%m-%d")
+        month_str = now.strftime("%Y-%m")
+
+        # 1. 8:00 PM Daily Scoring Calculation
+        if now.hour == DAILY_SCORING_HOUR and self.last_scored_date != today_str:
+            self.last_scored_date = today_str
+            logger.info(f"Triggering 8:00 PM Daily Scoring for {today_str}")
+            await self.run_daily_scoring(today_str)
+
+        # 2. 9:00 PM Tomorrow's Goal Setting Callout
+        if now.hour == DAILY_GOALS_HOUR and self.last_prompted_goals_date != today_str:
+            self.last_prompted_goals_date = today_str
+            logger.info(f"Triggering 9:00 PM Goal Prompt for {today_str}")
+            await self.run_daily_goals_callout()
+
+        # 3. Sunday 9:00 PM Weekly Executive SWOT Analysis
+        if now.weekday() == WEEKLY_SWOT_DAY and now.hour == WEEKLY_SWOT_HOUR and self.last_swot_date != today_str:
+            self.last_swot_date = today_str
+            logger.info("Triggering Sunday 9:00 PM Weekly SWOT Analysis")
+            await self.run_weekly_swot()
+
+        # 4. 1st of Month 10:00 AM Monthly Equity Ledger Evolution
+        if now.day == MONTHLY_CLOSE_DAY and now.hour == MONTHLY_CLOSE_HOUR and self.last_equity_month != month_str:
+            self.last_equity_month = month_str
+            logger.info(f"Triggering Monthly Equity Evolution Closeout for {month_str}")
+            await self.run_monthly_equity_closeout(now)
+
+    @chronos_loop.before_loop
+    async def before_chronos(self):
+        await self.bot.wait_until_ready()
+
+    async def run_daily_goals_callout(self):
+        """Prompt all 3 founders in #daily-reports to lock in tomorrow's commitments."""
+        channel = self.bot.get_channel(PRIMARY_GOALS_CHANNEL_ID)
+        if not channel:
+            return
+
+        embed = discord.Embed(
+            title="🌙 9:00 PM Commitment Lock • Declare Tomorrow's Goals",
+            description=(
+                "Team, before sleeping, declare your top 2-4 core commitments for tomorrow in this channel.\n\n"
+                "• **Hridesh (CEO)**: Strategy, fundraising, major deals, bottleneck removal\n"
+                "• **Swarit (CTO)**: Code architecture, shipping PRs, uptime & reliability\n"
+                "• **Rahul (COO)**: Operations velocity, sales pipeline, SOP execution\n\n"
+                "Format: Freeform bullets or numbered list. Gemini will parse complexity ($W_i$) and Role Dharma ($A_{dharma}$)."
+            ),
+            color=COLOR_PRIMARY
+        )
+        embed.set_footer(text="Krishna Engineering OS • 60-Second Frictionless Check-In")
+        await channel.send(embed=embed)
+
+    async def run_daily_scoring(self, today_str: str):
+        """Calculate and publish 8:00 PM daily scores, praise, and feedback."""
+        channel = self.bot.get_channel(PRIMARY_GOALS_CHANNEL_ID)
+        if not channel:
+            return
+
+        start_time = f"{today_str}T00:00:00"
+        end_time = f"{today_str}T23:59:59"
+
+        summary_fields = []
+        leaderboard_ranks = []
+
+        for key, info in FOUNDERS.items():
+            goals_record = await get_goals_for_date(key, today_str)
+            locked_goals = goals_record["parsed_goals"] if goals_record else []
+
+            updates = await get_updates_for_date_range(key, start_time, end_time)
+            updates_text = "\n".join([f"[{u['timestamp']}] {u['content']}" for u in updates])
+
+            msg_ids = [u["message_id"] for u in updates]
+            reactions = await get_reactions_for_messages(msg_ids)
+
+            # Gemini Evaluation
+            ai_eval = await evaluate_daily_execution_with_ai(key, locked_goals, updates_text)
+
+            # Krishna OS Mathematical Engine
+            author_id = info.get("discord_id", 0)
+            score_data = compute_daily_score(
+                task_evaluations=ai_eval.get("task_evaluations", []),
+                reactions=reactions,
+                author_discord_id=author_id,
+                spontaneous_bonus=ai_eval.get("spontaneous_bonus", 0.0),
+            )
+
+            final_score = score_data["final_score"]
+            leaderboard_ranks.append((key, info["display_name"], info["role"], final_score))
+
+            # Save to Database
+            await save_daily_score(
+                founder_key=key,
+                score_date=today_str,
+                completion_score=score_data["raw_task_sum"],
+                complexity_score=sum([t["complexity"] for t in score_data["task_breakdown"]]),
+                dharma_score=1.0,
+                peer_multiplier=score_data["peer_multiplier"],
+                bonus_points=score_data["bonus_points"],
+                final_score=final_score,
+                breakdown_json=score_data,
+                praise_text=ai_eval.get("praise_text", ""),
+                feedback_text=ai_eval.get("feedback_text", ""),
+            )
+
+            summary_fields.append({
+                "name": f"{info['display_name']} ({info['role']}) — {final_score:.1f} pts",
+                "value": (
+                    f"🏆 **Win:** {ai_eval.get('praise_text', 'Consistent execution.')}\n"
+                    f"⚙️ **Peer Modifier:** {score_data['peer_multiplier']}x "
+                    f"(✅ {score_data['emoji_counts']['✅']} | 🔥 {score_data['emoji_counts']['🔥']} | ⚠️ {score_data['emoji_counts']['⚠️']})\n"
+                    f"💡 **Feedback:** {ai_eval.get('feedback_text', 'Keep momentum.')}"
+                ),
+                "inline": False,
+            })
+
+        # Sort leaderboard
+        leaderboard_ranks.sort(key=lambda x: x[3], reverse=True)
+        top_name = leaderboard_ranks[0][1] if leaderboard_ranks else "Team"
+
+        embed = discord.Embed(
+            title=f"🌆 8:00 PM Daily Scorecard • {today_str}",
+            description=f"Top Contributor Today: 👑 **{top_name}**\nKrishna OS daily evaluation completed across all channels.",
+            color=COLOR_SUCCESS,
+        )
+        for field in summary_fields:
+            embed.add_field(name=field["name"], value=field["value"], inline=field["inline"])
+
+        embed.set_footer(text="Scores logged to persistent SQLite ledger • Reversible within 24h via /override")
+        await channel.send(embed=embed)
+
+    async def run_weekly_swot(self):
+        """Aggregate 7-day data and post Executive SWOT to #leadership."""
+        channel = self.bot.get_channel(LEADERSHIP_CHANNEL_ID) or self.bot.get_channel(PRIMARY_GOALS_CHANNEL_ID)
+        if not channel:
+            return
+
+        end_date = datetime.now().date()
+        start_date = end_date - timedelta(days=6)
+
+        weekly_payload = {}
+        for key in FOUNDERS.keys():
+            scores = await get_scores_in_date_range(key, start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d"))
+            weekly_payload[key] = {
+                "name": FOUNDERS[key]["display_name"],
+                "role": FOUNDERS[key]["role"],
+                "total_points": sum([s["final_score"] for s in scores]),
+                "avg_daily_points": sum([s["final_score"] for s in scores]) / max(1, len(scores)),
+                "days_active": len(scores),
+            }
+
+        swot_data = await generate_weekly_swot_with_ai(weekly_payload)
+
+        embed = discord.Embed(
+            title="📊 Weekly Strategic Executive SWOT Report",
+            description=swot_data.get("overall_summary", "Weekly sprint summary."),
+            color=COLOR_SWOT,
+        )
+
+        founder_swots = swot_data.get("founder_swot", {})
+        for key, data in founder_swots.items():
+            name = FOUNDERS.get(key, {}).get("display_name", key.capitalize())
+            role = FOUNDERS.get(key, {}).get("role", "")
+            pts = weekly_payload.get(key, {}).get("total_points", 0.0)
+
+            embed.add_field(
+                name=f"{name} ({role}) — Total Weekly: {pts:.1f} pts",
+                value=(
+                    f"💪 **Strengths:** {data.get('strengths', 'High output')}\n"
+                    f"⚠️ **Weaknesses:** {data.get('weaknesses', 'None flagged')}\n"
+                    f"🚀 **Opportunities:** {data.get('opportunities', 'Expansion')}\n"
+                    f"🛑 **Threats:** {data.get('threats', 'Burnout risk')}"
+                ),
+                inline=False
+            )
+
+        await channel.send(embed=embed)
+
+    async def run_monthly_equity_closeout(self, now: datetime):
+        """Compute monthly dynamic tranche and post provisional draft to #leadership."""
+        channel = self.bot.get_channel(LEADERSHIP_CHANNEL_ID) or self.bot.get_channel(PRIMARY_GOALS_CHANNEL_ID)
+        if not channel:
+            return
+
+        # Previous month
+        first_day_current = now.replace(day=1)
+        last_day_prev = first_day_current - timedelta(days=1)
+        prev_month_str = last_day_prev.strftime("%Y-%m")
+        start_date = last_day_prev.replace(day=1).strftime("%Y-%m-%d")
+        end_date = last_day_prev.strftime("%Y-%m-%d")
+
+        # Sum monthly scores for Swarit (CTO) and Rahul (COO)
+        swarit_scores = await get_scores_in_date_range("swarit", start_date, end_date)
+        rahul_scores = await get_scores_in_date_range("rahul", start_date, end_date)
+
+        total_swarit = sum([s["final_score"] for s in swarit_scores])
+        total_rahul = sum([s["final_score"] for s in rahul_scores])
+
+        # Current cumulative equity standings
+        users = await get_all_users()
+        user_map = {u["founder_key"]: u for u in users}
+        cur_swarit_equity = user_map.get("swarit", {}).get("earned_equity", 0.0)
+        cur_coo_equity = user_map.get("rahul", {}).get("earned_equity", 0.0)
+
+        # Month index calculation (assuming Month 1 starts September 2026)
+        month_index = 1
+
+        split_result = compute_monthly_equity_split(
+            month_index=month_index,
+            year_month=prev_month_str,
+            cto_score=total_swarit,
+            coo_score=total_rahul,
+            current_cto_equity=cur_swarit_equity,
+            current_coo_equity=cur_coo_equity,
+        )
+
+        # Save draft in database
+        await record_monthly_equity_tranche(
+            month_index=month_index,
+            year_month=prev_month_str,
+            founder_key="swarit",
+            total_monthly_score=total_swarit,
+            score_ratio=split_result["ratio_cto"],
+            equity_awarded=split_result["equity_awarded_cto"],
+            cumulative_equity=split_result["cumulative_cto"],
+            treasury_diverted=split_result["treasury_diverted"],
+            is_ratified=0,
+        )
+        await record_monthly_equity_tranche(
+            month_index=month_index,
+            year_month=prev_month_str,
+            founder_key="rahul",
+            total_monthly_score=total_rahul,
+            score_ratio=split_result["ratio_coo"],
+            equity_awarded=split_result["equity_awarded_coo"],
+            cumulative_equity=split_result["cumulative_coo"],
+            treasury_diverted=split_result["treasury_diverted"],
+            is_ratified=0,
+        )
+
+        embed = discord.Embed(
+            title=f"🏛️ Monthly Equity Evolution Report • Month {month_index} ({prev_month_str})",
+            description=(
+                f"**Tranche Released:** {split_result['monthly_tranche']:.4f}% of company equity (Month {month_index}/24)\n"
+                f"**Status:** ⏳ **Pending Founder Triple-Confirmation**\n\n"
+                f"• **Hridesh (CEO)**: 45.000% (Protected Vested Baseline)\n"
+                f"• **Swarit (CTO)**: Score {total_swarit:.1f} ({split_result['ratio_cto']*100:.1f}%) $\\to$ +{split_result['equity_awarded_cto']:.4f}% (Total: **{split_result['cumulative_cto']:.4f}%**)\n"
+                f"• **Rahul (COO)**: Score {total_rahul:.1f} ({split_result['ratio_coo']*100:.1f}%) $\\to$ +{split_result['equity_awarded_coo']:.4f}% (Total: **{split_result['cumulative_coo']:.4f}%**)\n"
+                f"• **Company Treasury**: +{split_result['treasury_diverted']:.4f}%\n\n"
+                f"Type `/confirm-equity {month_index}` to ratify this allocation into permanent legal standing."
+            ),
+            color=COLOR_EQUITY
+        )
+        await channel.send(embed=embed)
+
+
+async def setup(bot: commands.Bot):
+    await bot.add_cog(SchedulerCog(bot))

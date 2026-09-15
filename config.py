@@ -1,0 +1,138 @@
+"""
+Central Configuration for the Krishna Engineering OS Founder Operations Bot.
+"""
+
+import os
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Load .env if present
+load_dotenv()
+
+# Base directories
+BASE_DIR = Path(__file__).resolve().parent
+DB_PATH = BASE_DIR / "founder_ops.db"
+
+# Discord Bot Token (falls back to existing skill default token if not in env)
+DISCORD_BOT_TOKEN = os.getenv(
+    "DISCORD_BOT_TOKEN",
+    "MTUxMTc0MzAyMjIyMjU0MDgxMA.G8Qho0.j9FvQOCS3cv1dJdFevi8lnzlrvemNVpWPEnrLY",
+)
+
+# Gemini API Key
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+
+# ── Discord Channel Mapping ──────────────────────────────────────────────────
+# Mapped directly from the send-to-discord skill configuration
+CHANNELS = {
+    # Main update feeds
+    "dev-updates": 1508293104371896330,        # CTO (Swarit) primary feed
+    "development": 1508284746432516106,
+    "marketing-updates": 1508285631783108628,  # COO (Rahul) / Growth feed
+    "sales-updates": 1508301322695348415,      # COO (Rahul) sales feed
+    "finance-updates": 1511995144117817404,    # Finance & ops feed
+    "updates": 1511995144117817404,            # General updates feed
+    "general": 1513052112492171416,
+    # Reports & Goals
+    "reports": 1511996313410076682,            # Reports channel
+    "daily-reports": 1511606229951057921,      # Primary goal-setting & daily scoring thread/channel
+    # Leadership & Equity
+    "leadership": 1512741480039714947,         # Weekly SWOT and monthly equity ledger announcements
+}
+
+# The channel where daily 9 PM goals and 8 PM digests are posted by default
+PRIMARY_GOALS_CHANNEL_ID = CHANNELS["daily-reports"]
+LEADERSHIP_CHANNEL_ID = CHANNELS["leadership"]
+
+# Channels monitored for daytime work updates
+MONITORED_UPDATE_CHANNELS = {
+    CHANNELS["dev-updates"],
+    CHANNELS["marketing-updates"],
+    CHANNELS["sales-updates"],
+    CHANNELS["finance-updates"],
+    CHANNELS["updates"],
+    CHANNELS["reports"],
+    CHANNELS["daily-reports"],
+}
+
+# ── Founder Profiles & Initial Cap Table ──────────────────────────────────────
+# CEO: Hridesh (45% fully vested)
+# CTO: Swarit (25% target unvested, dynamic 24-month earnout)
+# COO: Rahul (30% target unvested, dynamic 24-month earnout)
+FOUNDERS = {
+    "hridesh": {
+        "display_name": "Hridesh",
+        "role": "CEO",
+        "vested_equity": 45.0,
+        "unvested_target": 0.0,
+        "dharma_focus": [
+            "Company vision and strategy",
+            "Fundraising and capital allocation",
+            "Key enterprise partnerships & high-stakes negotiations",
+            "Team direction, systems architecture & bottleneck removal",
+        ],
+        # Discord IDs can be updated dynamically via command or env
+        "discord_id": int(os.getenv("DISCORD_USER_HRIDESH", "1001")),
+    },
+    "swarit": {
+        "display_name": "Swarit",
+        "role": "CTO",
+        "vested_equity": 0.0,
+        "unvested_target": 25.0,
+        "dharma_focus": [
+            "Core code architecture & deep engineering execution",
+            "Shipping product features & merging critical PRs",
+            "System reliability, uptime, and database performance",
+            "Technical documentation, refactoring & security",
+        ],
+        "discord_id": int(os.getenv("DISCORD_USER_SWARIT", "1002")),
+    },
+    "rahul": {
+        "display_name": "Rahul",
+        "role": "COO",
+        "vested_equity": 0.0,
+        "unvested_target": 30.0,
+        "dharma_focus": [
+            "Operational throughput & SOP execution",
+            "Sales pipeline, client outreach, and conversion tracking",
+            "Marketing campaign rhythm & growth delivery",
+            "Cross-functional blocker clearing & team coordination",
+        ],
+        "discord_id": int(os.getenv("DISCORD_USER_RAHUL", "1003")),
+    },
+}
+
+# ── Dynamic Earnout & Equity Parameters ───────────────────────────────────────
+TOTAL_UNVESTED_POOL = 55.0         # 25% (Swarit) + 30% (Rahul)
+VESTING_HORIZON_MONTHS = 24        # 2-Year horizon
+MONTHLY_TRANCHE_EQUITY = TOTAL_UNVESTED_POOL / VESTING_HORIZON_MONTHS  # ~2.2916667%
+
+# Baseline target weights within the unvested pool
+TARGET_UNVESTED_WEIGHTS = {
+    "swarit": 25.0 / TOTAL_UNVESTED_POOL,  # ~0.454545 (45.45%)
+    "rahul": 30.0 / TOTAL_UNVESTED_POOL,   # ~0.545455 (54.55%)
+}
+
+# Safety Floor: minimum monthly performance threshold as ratio of peer baseline
+PERFORMANCE_SAFETY_FLOOR = 0.60    # 60% of expected baseline
+
+# ── Mathematical Scoring Weights & Bounds ─────────────────────────────────────
+COMPLEXITY_RANGE = (1, 5)          # W_i complexity weights (1 to 5)
+ROLE_DHARMA_RANGE = (0.8, 1.2)     # A_dharma alignment multiplier
+PEER_FACTOR_RANGE = (0.8, 1.2)     # M_peer reaction multiplier clamp
+BONUS_POINTS_MAX = 5.0             # I_bonus spontaneous firefighting bonus
+
+# Peer emoji weights
+PEER_EMOJIS = {
+    "✅": 0.05,    # Verified execution
+    "🔥": 0.10,    # Exceptional systems impact
+    "⚠️": -0.15,   # Quality concern / dispute / low leverage
+}
+
+# ── Scheduled Timings (24-Hour Clock, Local Time) ─────────────────────────────
+DAILY_SCORING_HOUR = 20            # 8:00 PM (Scoring, Praise, Daily Digest)
+DAILY_GOALS_HOUR = 21              # 9:00 PM (Prompt for Tomorrow's Goals)
+WEEKLY_SWOT_DAY = 6                # Sunday (0 = Monday, 6 = Sunday)
+WEEKLY_SWOT_HOUR = 21              # Sunday 9:00 PM
+MONTHLY_CLOSE_DAY = 1              # 1st day of month
+MONTHLY_CLOSE_HOUR = 10            # 10:00 AM

@@ -1,0 +1,138 @@
+"""
+Discord Cog: Tracker
+Monitors channel activity, captures daytime updates, processes 9 PM goal posts, and tracks peer reactions.
+"""
+
+import discord
+from discord.ext import commands
+from datetime import datetime, timedelta
+import logging
+from typing import Optional
+
+from config import (
+    CHANNELS,
+    PRIMARY_GOALS_CHANNEL_ID,
+    MONITORED_UPDATE_CHANNELS,
+    FOUNDERS,
+    PEER_EMOJIS,
+)
+from database.models import (
+    get_user_by_discord_id,
+    save_daily_goals,
+    save_channel_update,
+    record_peer_reaction,
+    remove_peer_reaction,
+    get_all_users,
+)
+from engine.evaluator import parse_daily_goals_with_ai
+from skills_bridge.discord_bridge import build_embed, COLOR_SUCCESS, COLOR_PRIMARY
+
+logger = logging.getLogger(__name__)
+
+
+class TrackerCog(commands.Cog):
+    def __init__(self, bot: commands.Bot):
+        self.bot = bot
+
+    def _resolve_founder_key(self, author_id: int, author_name: str) -> Optional[str]:
+        """Match author to one of the 3 founders (Hridesh, Swarit, Rahul)."""
+        lower_name = author_name.lower()
+        for key in FOUNDERS.keys():
+            if key in lower_name:
+                return key
+        return None
+
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.Message):
+        """Intercept messages to capture nightly goals or daytime updates."""
+        if message.author.bot:
+            return
+
+        user = await get_user_by_discord_id(message.author.id)
+        founder_key = user["founder_key"] if user else self._resolve_founder_key(message.author.id, message.author.name)
+
+        if not founder_key:
+            return
+
+        channel_id = message.channel.id
+        content = message.content.strip()
+        now = datetime.now()
+
+        # Check if message was posted in goals channel around goal-setting window or starts with "!goal" / "goal:"
+        is_goals_channel = channel_id == PRIMARY_GOALS_CHANNEL_ID
+        is_explicit_goal = content.lower().startswith(("goal", "tomorrow", "!goal", "/goal", "targets"))
+        is_nighttime = now.hour >= 20 or now.hour <= 4
+
+        if (is_goals_channel and is_nighttime) or is_explicit_goal:
+            # Tomorrow's date target (if late night past midnight, it's today)
+            target_date = (now if now.hour < 5 else now + timedelta(days=1)).strftime("%Y-%m-%d")
+
+            # Parse with Gemini AI
+            parsed_tasks = await parse_daily_goals_with_ai(founder_key, content)
+            await save_daily_goals(founder_key, target_date, content, parsed_tasks)
+
+            # Confirm with a neat reaction and verification message
+            try:
+                await message.add_reaction("🔒")
+            except Exception:
+                pass
+
+            task_summary = "\n".join([
+                f"• **{t.get('task')}** (Weight: {t.get('complexity')}/5 | Dharma: {t.get('dharma_multiplier')}x)"
+                for t in parsed_tasks
+            ])
+            embed = discord.Embed(
+                title=f"🔒 Commitments Locked for {FOUNDERS[founder_key]['display_name']}",
+                description=f"Target Date: **{target_date}**\n\n{task_summary}",
+                color=COLOR_SUCCESS
+            )
+            embed.set_footer(text="Krishna Engineering OS • Evaluated at 8:00 PM tomorrow")
+            await message.channel.send(embed=embed)
+            return
+
+        # Check if message is in any monitored update channels
+        if channel_id in MONITORED_UPDATE_CHANNELS:
+            await save_channel_update(
+                message_id=message.id,
+                founder_key=founder_key,
+                discord_user_id=message.author.id,
+                channel_id=channel_id,
+                content=content,
+                timestamp=now.isoformat(),
+            )
+            logger.info(f"Logged update from {founder_key} in channel {channel_id}: {content[:40]}...")
+
+    @commands.Cog.listener()
+    async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
+        """Track peer emoji reactions (✅, 🔥, ⚠️) on updates."""
+        if payload.user_id == self.bot.user.id:
+            return
+
+        emoji_str = str(payload.emoji.name)
+        if emoji_str not in PEER_EMOJIS:
+            return
+
+        # Check reactor identity
+        user = await get_user_by_discord_id(payload.user_id)
+        reactor_key = user["founder_key"] if user else "peer"
+
+        weight = PEER_EMOJIS[emoji_str]
+        await record_peer_reaction(
+            message_id=payload.message_id,
+            reactor_discord_id=payload.user_id,
+            reactor_founder_key=reactor_key,
+            emoji=emoji_str,
+            weight=weight,
+        )
+        logger.info(f"Recorded reaction {emoji_str} by {reactor_key} on message {payload.message_id}")
+
+    @commands.Cog.listener()
+    async def on_raw_reaction_remove(self, payload: discord.RawReactionActionEvent):
+        """Handle removed reactions."""
+        emoji_str = str(payload.emoji.name)
+        if emoji_str in PEER_EMOJIS:
+            await remove_peer_reaction(payload.message_id, payload.user_id, emoji_str)
+
+
+async def setup(bot: commands.Bot):
+    await bot.add_cog(TrackerCog(bot))
