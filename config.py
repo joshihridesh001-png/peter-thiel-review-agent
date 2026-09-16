@@ -28,10 +28,10 @@ DB_PATH = DATA_DIR / "founder_ops.db"
 DISCORD_BOT_TOKEN = os.getenv(
     "DISCORD_BOT_TOKEN",
     "MTUxMTc0MzAyMjIyMjU0MDgxMA.G8Qho0.j9FvQOCS3cv1dJdFevi8lnzlrvemNVpWPEnrLY",
-)
+).strip()
 
 # Gemini API Key
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 
 # ── Discord Channel Mapping ──────────────────────────────────────────────────
 # Mapped directly from the send-to-discord skill configuration
