@@ -36,19 +36,28 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 # ── Discord Channel Mapping ──────────────────────────────────────────────────
 # Mapped directly from the send-to-discord skill configuration
 CHANNELS = {
-    # Main update feeds
-    "dev-updates": 1508293104371896330,        # CTO (Swarit) primary feed
-    "development": 1508284746432516106,
-    "marketing-updates": 1508285631783108628,  # COO (Rahul) / Growth feed
-    "sales-updates": 1508301322695348415,      # COO (Rahul) sales feed
+    # Development
+    "dev-general": 1510083831405875391,        # Dev general discussion & engineering architecture
+    "dev-updates": 1508293104371896330,        # CTO (Swarit) primary update feed
+    "dev-ideas": 1508149700639985725,          # Architecture ideas & system designs
+    # Sales
+    "sales-updates": 1508301322695348415,      # Sales & onboarding feed (includes Peter Thiel assistant drops)
+    "sales-general": 1510084020870975539,      # Sales pipeline & lead discussions
+    "sales-ideas": 1508299264684724326,        # Sales strategies & pitches
+    # Marketing
+    "marketing-updates": 1508285631783108628,  # Marketing campaign & growth feed
+    "marketing-general": 1510083922011099166,  # Marketing general discussions
+    "marketing-ideas": 1508285422218772504,    # Content ideas & scripts
+    # Finance
     "finance-updates": 1511995144117817404,    # Finance & ops feed
-    "updates": 1511995144117817404,            # General updates feed
-    "general": 1513052112492171416,
-    # Reports & Goals
-    "reports": 1511996313410076682,            # Reports channel
+    "finance-general": 1510084175871348746,    # Finance discussions
+    # Design
+    "design-general": 1529324256796868689,     # UI/UX design general
+    # Server-wide & Leadership
+    "general": 1471340826977239216,            # Main server general chat
     "daily-reports": 1511606229951057921,      # Primary goal-setting & daily scoring thread/channel
-    # Leadership & Equity
     "leadership": 1512741480039714947,         # Weekly SWOT and monthly equity ledger announcements
+    "scores": 1549488768585695355,             # Scores channel
 }
 
 # The channel where daily 9 PM goals and 8 PM digests are posted by default
@@ -56,14 +65,15 @@ PRIMARY_GOALS_CHANNEL_ID = CHANNELS["daily-reports"]
 LEADERSHIP_CHANNEL_ID = CHANNELS["leadership"]
 
 # Channels monitored for daytime work updates
-MONITORED_UPDATE_CHANNELS = {
-    CHANNELS["dev-updates"],
-    CHANNELS["marketing-updates"],
-    CHANNELS["sales-updates"],
-    CHANNELS["finance-updates"],
-    CHANNELS["updates"],
-    CHANNELS["reports"],
-    CHANNELS["daily-reports"],
+MONITORED_UPDATE_CHANNELS = set(CHANNELS.values())
+
+# Automated bot embeds that should NOT be counted as work updates
+SYSTEM_EMBED_TITLES = {
+    "Daily Scorecard",
+    "Commitment Lock",
+    "Monthly Equity Evolution",
+    "Strategic Executive SWOT",
+    "Cloud Deployment Live",
 }
 
 # ── Founder Profiles & Initial Cap Table ──────────────────────────────────────
