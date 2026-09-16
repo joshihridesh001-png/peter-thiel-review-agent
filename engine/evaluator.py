@@ -77,20 +77,21 @@ Output MUST be a valid JSON array of objects with keys:
 
     client = _get_client()
     if client:
-        try:
-            response = client.models.generate_content(
-                model='gemini-3.6-flash',
-                contents=f"{system_prompt}\n\nRaw Goals Submitted:\n{raw_goals_text}",
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    temperature=0.2,
+        for model_name in ['gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-flash-latest']:
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=f"{system_prompt}\n\nRaw Goals Submitted:\n{raw_goals_text}",
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        temperature=0.2,
+                    )
                 )
-            )
-            parsed = json.loads(response.text)
-            if isinstance(parsed, list):
-                return parsed
-        except Exception as e:
-            logger.error(f"Gemini API parse failed, using fallback: {e}")
+                parsed = json.loads(response.text)
+                if isinstance(parsed, list):
+                    return parsed
+            except Exception as e:
+                logger.warning(f"Model {model_name} parse failed: {e}")
 
     # Fallback Heuristic Parser (Offline / No API Key)
     lines = [line.strip().lstrip("-*•123456789. ") for line in raw_goals_text.strip().split("\n") if line.strip()]
@@ -172,23 +173,25 @@ Return valid JSON with schema:
     client = _get_client()
     if client:
         import asyncio
-        for attempt in range(3):
-            try:
-                response = client.models.generate_content(
-                    model='gemini-3.6-flash',
-                    contents=system_prompt,
-                    config=types.GenerateContentConfig(
-                        response_mime_type="application/json",
-                        temperature=0.2,
+        for model_name in ['gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-flash-latest']:
+            for attempt in range(2):
+                try:
+                    response = client.models.generate_content(
+                        model=model_name,
+                        contents=system_prompt,
+                        config=types.GenerateContentConfig(
+                            response_mime_type="application/json",
+                            temperature=0.2,
+                        )
                     )
-                )
-                return json.loads(response.text)
-            except Exception as e:
-                logger.warning(f"Gemini API attempt {attempt+1}/3 failed: {e}")
-                if attempt < 2:
-                    await asyncio.sleep(1.5 * (attempt + 1))
-                else:
-                    logger.error(f"Gemini API evaluation failed after retries: {e}")
+                    return json.loads(response.text)
+                except Exception as e:
+                    logger.warning(f"Model {model_name} attempt {attempt+1} failed: {e}")
+                    if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+                        # Switch immediately to next model on quota exhaustion
+                        break
+                    if attempt < 1:
+                        await asyncio.sleep(1.0)
 
     # Fallback Heuristic Evaluator
     evaluations = []

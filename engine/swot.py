@@ -32,19 +32,20 @@ Input Data:
 """
     client = _get_client()
     if client:
-        try:
-            from google.genai import types
-            response = client.models.generate_content(
-                model='gemini-3.6-flash',
-                contents=f"{system_prompt}\n{json.dumps(weekly_data, indent=2)}",
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    temperature=0.3,
+        for model_name in ['gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-flash-latest']:
+            try:
+                from google.genai import types
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=f"{system_prompt}\n{json.dumps(weekly_data, indent=2)}",
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        temperature=0.3,
+                    )
                 )
-            )
-            return json.loads(response.text)
-        except Exception as e:
-            logger.error(f"Gemini SWOT generation failed, using structured template: {e}")
+                return json.loads(response.text)
+            except Exception as e:
+                logger.warning(f"Model {model_name} SWOT generation failed: {e}")
 
     # Fallback template
     return {

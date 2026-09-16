@@ -274,14 +274,18 @@ class SchedulerCog(commands.Cog):
                 feedback_text=ai_eval.get("feedback_text", ""),
             )
 
+            val = (
+                f"🏆 **Win:** {ai_eval.get('praise_text', 'Consistent execution.')}\n"
+                f"⚙️ **Peer Modifier:** {score_data['peer_multiplier']}x "
+                f"(✅ {score_data['emoji_counts']['✅']} | 🔥 {score_data['emoji_counts']['🔥']} | ⚠️ {score_data['emoji_counts']['⚠️']})\n"
+                f"💡 **Thiel Critique:** {ai_eval.get('feedback_text', 'Keep momentum.')}"
+            )
+            if len(val) > 1024:
+                val = val[:1020] + "..."
+
             summary_fields.append({
                 "name": f"{info['display_name']} ({info['role']}) — {final_score:.1f} pts",
-                "value": (
-                    f"🏆 **Win:** {ai_eval.get('praise_text', 'Consistent execution.')}\n"
-                    f"⚙️ **Peer Modifier:** {score_data['peer_multiplier']}x "
-                    f"(✅ {score_data['emoji_counts']['✅']} | 🔥 {score_data['emoji_counts']['🔥']} | ⚠️ {score_data['emoji_counts']['⚠️']})\n"
-                    f"💡 **Feedback:** {ai_eval.get('feedback_text', 'Keep momentum.')}"
-                ),
+                "value": val,
                 "inline": False,
             })
 

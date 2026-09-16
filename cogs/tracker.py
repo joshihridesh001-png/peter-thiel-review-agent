@@ -98,14 +98,17 @@ class TrackerCog(commands.Cog):
         if not content.strip():
             return
 
-        now = datetime.now(TIMEZONE)
+        # Ignore bot's own posts in primary goals channel (prevents feedback loops on scorecards and lock embeds)
+        if channel_id == PRIMARY_GOALS_CHANNEL_ID and message.author.bot:
+            return
 
-        # Check if message was posted in goals channel around goal-setting window or starts with "!goal" / "goal:"
+        # Goals can ONLY be declared by human founders, never by automated bots
+        is_human = not message.author.bot
         is_goals_channel = channel_id == PRIMARY_GOALS_CHANNEL_ID
         is_explicit_goal = content.lower().startswith(("goal", "tomorrow", "!goal", "/goal", "targets"))
         is_nighttime = now.hour >= 20 or now.hour <= 4
 
-        if (is_goals_channel and is_nighttime) or is_explicit_goal:
+        if is_human and ((is_goals_channel and is_nighttime) or is_explicit_goal):
             # Tomorrow's date target (if late night past midnight, it's today)
             target_date = (now if now.hour < 5 else now + timedelta(days=1)).strftime("%Y-%m-%d")
 
