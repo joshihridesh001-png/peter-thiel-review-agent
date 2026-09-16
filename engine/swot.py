@@ -35,7 +35,7 @@ Input Data:
         try:
             from google.genai import types
             response = client.models.generate_content(
-                model='gemini-2.5-flash',
+                model='gemini-3.6-flash',
                 contents=f"{system_prompt}\n{json.dumps(weekly_data, indent=2)}",
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",

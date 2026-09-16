@@ -137,11 +137,15 @@ async def init_db() -> None:
         );
         """)
 
-        # Seed initial founders if table is empty
+        # Seed or sync founders into users table
         for key, data in FOUNDERS.items():
             await db.execute("""
-            INSERT OR IGNORE INTO users (founder_key, discord_id, display_name, role, vested_equity, unvested_target, earned_equity)
-            VALUES (?, ?, ?, ?, ?, ?, ?);
+            INSERT INTO users (founder_key, discord_id, display_name, role, vested_equity, unvested_target, earned_equity)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(founder_key) DO UPDATE SET
+                discord_id = excluded.discord_id,
+                display_name = excluded.display_name,
+                role = excluded.role;
             """, (
                 key,
                 data["discord_id"],

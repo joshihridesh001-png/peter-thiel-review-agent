@@ -12,9 +12,12 @@ from discord.ext import commands, tasks
 from datetime import datetime, timedelta
 import logging
 
+import zoneinfo
 from config import (
     PRIMARY_GOALS_CHANNEL_ID,
     LEADERSHIP_CHANNEL_ID,
+    MONITORED_UPDATE_CHANNELS,
+    PEER_EMOJIS,
     FOUNDERS,
     DAILY_SCORING_HOUR,
     DAILY_GOALS_HOUR,
@@ -30,6 +33,9 @@ from database.models import (
     get_updates_for_date_range,
     get_reactions_for_messages,
     save_daily_score,
+    get_daily_score,
+    save_channel_update,
+    record_peer_reaction,
     get_scores_in_date_range,
     record_monthly_equity_tranche,
     get_latest_equity_status,
@@ -68,11 +74,15 @@ class SchedulerCog(commands.Cog):
         today_str = now.strftime("%Y-%m-%d")
         month_str = now.strftime("%Y-%m")
 
-        # 1. 8:00 PM Daily Scoring Calculation
-        if now.hour == DAILY_SCORING_HOUR and self.last_scored_date != today_str:
-            self.last_scored_date = today_str
-            logger.info(f"Triggering 8:00 PM Daily Scoring for {today_str}")
-            await self.run_daily_scoring(today_str)
+        # 1. 8:00 PM Daily Scoring Calculation (with catch-up between 8 PM and 11 PM)
+        if (now.hour >= DAILY_SCORING_HOUR and now.hour < 23) and self.last_scored_date != today_str:
+            existing = await get_daily_score("hridesh", today_str)
+            if not existing:
+                self.last_scored_date = today_str
+                logger.info(f"Triggering Daily Scoring calculation for {today_str}")
+                await self.run_daily_scoring(today_str)
+            else:
+                self.last_scored_date = today_str
 
         # 2. 9:00 PM Tomorrow's Goal Setting Callout
         if now.hour == DAILY_GOALS_HOUR and self.last_prompted_goals_date != today_str:
@@ -95,6 +105,57 @@ class SchedulerCog(commands.Cog):
     @chronos_loop.before_loop
     async def before_chronos(self):
         await self.bot.wait_until_ready()
+
+    async def sync_channel_history_for_today(self):
+        """Actively read monitored Discord channels for today's updates and save to DB."""
+        now = datetime.now(TIMEZONE)
+        after_dt = (now - timedelta(hours=24)).astimezone(zoneinfo.ZoneInfo("UTC"))
+        tracker_cog = self.bot.get_cog("TrackerCog")
+
+        for ch_id in MONITORED_UPDATE_CHANNELS:
+            channel = self.bot.get_channel(ch_id)
+            if not channel:
+                try:
+                    channel = await self.bot.fetch_channel(ch_id)
+                except Exception:
+                    continue
+            if not channel:
+                continue
+
+            try:
+                async for msg in channel.history(limit=50, after=after_dt):
+                    if msg.author.bot:
+                        continue
+                    founder_key = None
+                    if tracker_cog:
+                        founder_key = tracker_cog._resolve_founder_key(msg.author.id, msg.author.name)
+                    if not founder_key:
+                        continue
+
+                    await save_channel_update(
+                        message_id=msg.id,
+                        founder_key=founder_key,
+                        discord_user_id=msg.author.id,
+                        channel_id=channel.id,
+                        content=msg.content,
+                        timestamp=msg.created_at.isoformat(),
+                    )
+
+                    for reaction in msg.reactions:
+                        emoji_str = str(reaction.emoji)
+                        if emoji_str in PEER_EMOJIS:
+                            async for user in reaction.users():
+                                if user.id != self.bot.user.id:
+                                    r_key = tracker_cog._resolve_founder_key(user.id, user.name) if tracker_cog else "peer"
+                                    await record_peer_reaction(
+                                        message_id=msg.id,
+                                        reactor_discord_id=user.id,
+                                        reactor_founder_key=r_key or "peer",
+                                        emoji=emoji_str,
+                                        weight=PEER_EMOJIS[emoji_str],
+                                    )
+            except Exception as e:
+                logger.warning(f"Could not fetch history from channel {ch_id}: {e}")
 
     async def run_daily_goals_callout(self):
         """Prompt all 3 founders in #daily-reports to lock in tomorrow's commitments."""
@@ -122,8 +183,12 @@ class SchedulerCog(commands.Cog):
         if not channel:
             return
 
-        start_time = f"{today_str}T00:00:00"
-        end_time = f"{today_str}T23:59:59"
+        # 1. Sync live channel history from Discord
+        await self.sync_channel_history_for_today()
+
+        now_dt = datetime.now(TIMEZONE)
+        start_time = (now_dt - timedelta(hours=24)).isoformat()
+        end_time = (now_dt + timedelta(hours=2)).isoformat()
 
         summary_fields = []
         leaderboard_ranks = []

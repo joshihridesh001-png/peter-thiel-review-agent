@@ -82,8 +82,8 @@ FOUNDERS = {
             "Key enterprise partnerships & high-stakes negotiations",
             "Team direction, systems architecture & bottleneck removal",
         ],
-        # Discord IDs can be updated dynamically via command or env
-        "discord_id": int(os.getenv("DISCORD_USER_HRIDESH", "1001")),
+        "discord_id": int(os.getenv("DISCORD_USER_HRIDESH", "1159464740788109312")),
+        "usernames": ["hridesh_joshi", "hridesh"],
     },
     "swarit": {
         "display_name": "Swarit",
@@ -96,7 +96,8 @@ FOUNDERS = {
             "System reliability, uptime, and database performance",
             "Technical documentation, refactoring & security",
         ],
-        "discord_id": int(os.getenv("DISCORD_USER_SWARIT", "1002")),
+        "discord_id": int(os.getenv("DISCORD_USER_SWARIT", "1419294391041921125")),
+        "usernames": ["swarit_soni", "swarit"],
     },
     "rahul": {
         "display_name": "Rahul",
@@ -109,7 +110,8 @@ FOUNDERS = {
             "Marketing campaign rhythm & growth delivery",
             "Cross-functional blocker clearing & team coordination",
         ],
-        "discord_id": int(os.getenv("DISCORD_USER_RAHUL", "1003")),
+        "discord_id": int(os.getenv("DISCORD_USER_RAHUL", "1541842669922295980")),
+        "usernames": ["2muchmotion__", "rahul", "rahul's bitch"],
     },
 }
 

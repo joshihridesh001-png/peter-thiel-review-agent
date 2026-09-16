@@ -36,10 +36,23 @@ class TrackerCog(commands.Cog):
 
     def _resolve_founder_key(self, author_id: int, author_name: str) -> Optional[str]:
         """Match author to one of the 3 founders (Hridesh, Swarit, Rahul)."""
-        lower_name = author_name.lower()
+        # 1. Direct Discord ID match
+        for key, info in FOUNDERS.items():
+            if author_id == info.get("discord_id"):
+                return key
+
+        # 2. Known username / alias match
+        lower_name = author_name.lower().strip()
+        for key, info in FOUNDERS.items():
+            for alias in info.get("usernames", []):
+                if alias.lower() in lower_name:
+                    return key
+
+        # 3. Key substring match
         for key in FOUNDERS.keys():
             if key in lower_name:
                 return key
+
         return None
 
     @commands.Cog.listener()

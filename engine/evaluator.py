@@ -79,7 +79,7 @@ Output MUST be a valid JSON array of objects with keys:
     if client:
         try:
             response = client.models.generate_content(
-                model='gemini-2.5-flash',
+                model='gemini-3.6-flash',
                 contents=f"{system_prompt}\n\nRaw Goals Submitted:\n{raw_goals_text}",
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
@@ -133,22 +133,23 @@ async def evaluate_daily_execution_with_ai(
     role = founder.get("role", "Founder")
 
     system_prompt = f"""
-You are the Systems Evaluator for the Krishna Engineering OS.
-Evaluate the founder's daily throughput by comparing their daytime channel updates against their locked goals.
+You are Peter Thiel, Chief Reviewer and Systems Evaluator for the Krishna Engineering OS.
+Evaluate the founder's daily throughput by analyzing their daytime channel updates and comparing against locked commitments.
 
 Founder: {founder.get('display_name', founder_key)} ({role})
-Locked Goals:
-{json.dumps(locked_goals, indent=2)}
+Locked Commitments:
+{json.dumps(locked_goals, indent=2) if locked_goals else "(No prior commitments were locked for today - deduce tasks and throughput directly from updates)"}
 
 Channel Updates Logged Today:
 {updates_text if updates_text.strip() else "(No updates logged in monitored channels today)"}
 
 Evaluation Instructions:
-1. For each locked goal, judge completion percentage (0.0 to 1.0) based strictly on evidence provided in updates.
-2. If work was partially done, assign proportional credit (e.g. 0.5 for drafted doc or WIP PR).
-3. If an update shows an unscripted critical win or emergency firefighting not in the locked goals, assign a "spontaneous_bonus" (0 to 5 points).
-4. Provide a punchy, specific "praise_text" celebrating high-leverage execution.
-5. Provide a constructive, systems-oriented "feedback_text" diagnosing any bottlenecks.
+1. If locked commitments exist, evaluate completion (0.0 to 1.0) for each commitment based on evidence in the updates.
+2. If NO locked commitments exist, identify the distinct tasks, initiatives, or milestones the founder worked on based on their updates. Assign complexity (1 to 5) and role dharma multiplier (0.8 to 1.2) for each task, and score their completion.
+3. If no updates exist, return an empty task_evaluations list and 0 spontaneous bonus.
+4. Reward spontaneous high-leverage firefighting or unscripted strategic breakthroughs with a "spontaneous_bonus" (0 to 5 points).
+5. In "praise_text": Speak in Peter Thiel's sharp, candid, contrarian voice. Praise zero-to-one thinking, distribution focus, and decisive engineering execution.
+6. In "feedback_text": Provide Thiel-style strategic critique—challenge incrementalism, demand definite optimism, and highlight any operational bottlenecks.
 
 Return valid JSON with schema:
 {{
@@ -170,37 +171,52 @@ Return valid JSON with schema:
 
     client = _get_client()
     if client:
-        try:
-            response = client.models.generate_content(
-                model='gemini-2.5-flash',
-                contents=system_prompt,
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    temperature=0.2,
+        import asyncio
+        for attempt in range(3):
+            try:
+                response = client.models.generate_content(
+                    model='gemini-3.6-flash',
+                    contents=system_prompt,
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        temperature=0.2,
+                    )
                 )
-            )
-            return json.loads(response.text)
-        except Exception as e:
-            logger.error(f"Gemini API evaluation failed: {e}")
+                return json.loads(response.text)
+            except Exception as e:
+                logger.warning(f"Gemini API attempt {attempt+1}/3 failed: {e}")
+                if attempt < 2:
+                    await asyncio.sleep(1.5 * (attempt + 1))
+                else:
+                    logger.error(f"Gemini API evaluation failed after retries: {e}")
 
     # Fallback Heuristic Evaluator
     evaluations = []
     has_updates = bool(updates_text.strip())
-    for g in locked_goals:
-        # If updates exist, give 0.8 completion credit as fallback, else 0.2
-        comp = 0.8 if has_updates else 0.2
+    if locked_goals:
+        for g in locked_goals:
+            comp = 0.8 if has_updates else 0.2
+            evaluations.append({
+                "task": g.get("task", ""),
+                "completion": comp,
+                "evidence_snippet": "Heuristic match from daytime channel activity" if has_updates else "No channel evidence found",
+                "complexity": g.get("complexity", 3),
+                "dharma_multiplier": g.get("dharma_multiplier", 1.0),
+            })
+    elif has_updates:
+        # Fallback when no goals were locked but updates exist
         evaluations.append({
-            "task": g.get("task", ""),
-            "completion": comp,
-            "evidence_snippet": "Heuristic match from daytime channel activity" if has_updates else "No channel evidence found",
-            "complexity": g.get("complexity", 3),
-            "dharma_multiplier": g.get("dharma_multiplier", 1.0),
+            "task": f"Daytime execution in {role} focus area",
+            "completion": 0.85,
+            "evidence_snippet": updates_text[:120].replace('\n', ' '),
+            "complexity": 3,
+            "dharma_multiplier": 1.0,
         })
 
     return {
         "task_evaluations": evaluations,
-        "spontaneous_bonus": 1.0 if has_updates else 0.0,
-        "spontaneous_reason": "Active presence in channels",
+        "spontaneous_bonus": 2.0 if has_updates else 0.0,
+        "spontaneous_reason": "Active execution in channels" if has_updates else "No activity logged",
         "praise_text": f"Consistent execution in {role} focus areas today." if has_updates else "Rest or offline work noted.",
-        "feedback_text": "Remember to drop links to commits/docs in channels for automated verification."
+        "feedback_text": "Ensure daily commitments are locked before 9:00 PM for maximum alignment."
     }

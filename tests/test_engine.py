@@ -138,48 +138,56 @@ class TestDatabaseAndPersistence(unittest.IsolatedAsyncioTestCase):
         users = await get_all_users()
         self.assertEqual(len(users), 3)
 
+        test_date = "2099-01-01"
         # 1. Goal saving
         await save_daily_goals(
             founder_key="swarit",
-            goal_date="2026-09-16",
+            goal_date=test_date,
             raw_text="• Ship websocket handler\n• Optimize SQL queries",
             parsed_goals=[
                 {"task": "Ship websocket handler", "complexity": 3, "dharma_multiplier": 1.2},
                 {"task": "Optimize SQL queries", "complexity": 4, "dharma_multiplier": 1.2}
             ]
         )
-        goals = await get_goals_for_date("swarit", "2026-09-16")
+        goals = await get_goals_for_date("swarit", test_date)
         self.assertIsNotNone(goals)
         self.assertEqual(len(goals["parsed_goals"]), 2)
 
         # 2. Update logging
+        msg_id = 999888999
+        from database.db import get_db
+        async with get_db() as db:
+            await db.execute("DELETE FROM updates WHERE message_id = ?;", (msg_id,))
+            await db.execute("DELETE FROM reactions WHERE message_id = ?;", (msg_id,))
+            await db.commit()
+
         await save_channel_update(
-            message_id=999888,
+            message_id=msg_id,
             founder_key="swarit",
             discord_user_id=12345,
             channel_id=1508293104371896330,
             content="Merged PR #12 for websocket connection",
-            timestamp="2026-09-16T14:30:00"
+            timestamp=f"{test_date}T14:30:00"
         )
-        updates = await get_updates_for_date_range("swarit", "2026-09-16T00:00:00", "2026-09-16T23:59:59")
+        updates = await get_updates_for_date_range("swarit", f"{test_date}T00:00:00", f"{test_date}T23:59:59")
         self.assertEqual(len(updates), 1)
 
         # 3. Peer Reaction
         await record_peer_reaction(
-            message_id=999888,
+            message_id=msg_id,
             reactor_discord_id=67890,
             reactor_founder_key="rahul",
             emoji="🔥",
             weight=0.10
         )
-        rx = await get_reactions_for_messages([999888])
+        rx = await get_reactions_for_messages([msg_id])
         self.assertEqual(len(rx), 1)
         self.assertEqual(rx[0]["emoji"], "🔥")
 
         # 4. Save Score
         await save_daily_score(
             founder_key="swarit",
-            score_date="2026-09-16",
+            score_date=test_date,
             completion_score=7.2,
             complexity_score=7.0,
             dharma_score=1.2,
@@ -190,7 +198,7 @@ class TestDatabaseAndPersistence(unittest.IsolatedAsyncioTestCase):
             praise_text="Crushed the websocket architecture!",
             feedback_text="Remember to add documentation."
         )
-        score = await get_daily_score("swarit", "2026-09-16")
+        score = await get_daily_score("swarit", test_date)
         self.assertIsNotNone(score)
         self.assertEqual(score["final_score"], 8.92)
 
