@@ -112,11 +112,17 @@ class SchedulerCog(commands.Cog):
         if not target_date:
             target_date = datetime.now(TIMEZONE).date()
 
-        # Strictly calculate start and end of target day in IST, then convert to UTC for Discord API
-        start_of_day_ist = datetime(target_date.year, target_date.month, target_date.day, 0, 0, 0, tzinfo=TIMEZONE)
+        # Strictly calculate start (05:00 AM IST) and end of target day in IST, then convert to UTC
+        start_of_day_ist = datetime(target_date.year, target_date.month, target_date.day, 5, 0, 0, tzinfo=TIMEZONE)
         end_of_day_ist = datetime(target_date.year, target_date.month, target_date.day, 23, 59, 59, tzinfo=TIMEZONE)
         start_utc = start_of_day_ist.astimezone(zoneinfo.ZoneInfo("UTC"))
         end_utc = end_of_day_ist.astimezone(zoneinfo.ZoneInfo("UTC"))
+
+        prev_date = target_date - timedelta(days=1)
+        prev_patterns = [
+            f"{prev_date.day} {prev_date.strftime('%b').lower()}",
+            f"{prev_date.strftime('%Y-%m-%d')}",
+        ]
 
         tracker_cog = self.bot.get_cog("TrackerCog")
 
@@ -146,6 +152,20 @@ class SchedulerCog(commands.Cog):
                     if is_sys:
                         continue
 
+                    # Build content including embed descriptions for assistant posts
+                    content = msg.content.strip()
+                    for e in msg.embeds:
+                        if e.description:
+                            content += f"\n[Embed: {e.title or ''}] {e.description}"
+
+                    if not content.strip():
+                        continue
+
+                    # If the content explicitly states it's an update for a previous date, ignore it
+                    lower_content = content.lower()
+                    if any(p in lower_content for p in prev_patterns):
+                        continue
+
                     # Resolve founder key (including Peter Thiel assistant bot for Hridesh)
                     founder_key = None
                     if tracker_cog:
@@ -155,15 +175,6 @@ class SchedulerCog(commands.Cog):
                             is_bot=msg.author.bot
                         )
                     if not founder_key:
-                        continue
-
-                    # Build content including embed descriptions for assistant posts
-                    content = msg.content.strip()
-                    for e in msg.embeds:
-                        if e.description:
-                            content += f"\n[Embed: {e.title or ''}] {e.description}"
-
-                    if not content.strip():
                         continue
 
                     # Store in SQLite with IST timestamp for exact day matching
@@ -227,18 +238,29 @@ class SchedulerCog(commands.Cog):
 
         await self.sync_channel_history_for_today(target_date)
 
-        # Strictly filter updates from 00:00:00 to 23:59:59 of today IST
-        start_time = f"{today_str}T00:00:00"
+        # Strictly filter updates from 05:00:00 to 23:59:59 of today IST (daytime work cycle)
+        start_time = f"{today_str}T05:00:00"
         end_time = f"{today_str}T23:59:59"
 
         summary_fields = []
         leaderboard_ranks = []
 
+        prev_date = target_date - timedelta(days=1)
+        prev_patterns = [
+            f"{prev_date.day} {prev_date.strftime('%b').lower()}",
+            f"{prev_date.strftime('%Y-%m-%d')}",
+        ]
+
         for key, info in FOUNDERS.items():
             goals_record = await get_goals_for_date(key, today_str)
             locked_goals = goals_record["parsed_goals"] if goals_record else []
 
-            updates = await get_updates_for_date_range(key, start_time, end_time)
+            raw_updates = await get_updates_for_date_range(key, start_time, end_time)
+            # Filter out any updates that explicitly belong to a previous day
+            updates = [
+                u for u in raw_updates 
+                if not any(p in u["content"].lower() for p in prev_patterns)
+            ]
             updates_text = "\n".join([f"[{u['timestamp']}] {u['content']}" for u in updates])
 
             msg_ids = [u["message_id"] for u in updates]
