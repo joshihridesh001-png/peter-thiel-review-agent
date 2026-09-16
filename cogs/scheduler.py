@@ -296,20 +296,44 @@ class SchedulerCog(commands.Cog):
                 feedback_text=ai_eval.get("feedback_text", ""),
             )
 
+            task_lines = []
+            for t in score_data.get("task_breakdown", []):
+                task_desc = t.get("task", "Task")
+                if len(task_desc) > 38:
+                    task_desc = task_desc[:35] + "..."
+                comp_pct = int(t.get("completion", 0.0) * 100)
+                w = int(t.get("complexity", 3))
+                pts = t.get("task_points", 0.0)
+                task_lines.append(f"• **{task_desc}** (W:{w}/5, {comp_pct}%) → **+{pts:.1f} pts**")
+
+            tasks_str = "\n".join(task_lines) if task_lines else "• *No verified tasks recorded today*"
+            bonus_pts = score_data.get("bonus_points", 0.0)
+            bonus_reason = ai_eval.get("spontaneous_reason", "")
+            bonus_suffix = f" *({bonus_reason[:35]})*" if bonus_reason else ""
+            bonus_str = f"• **Spontaneous Bonus:** +{bonus_pts:.1f} pts{bonus_suffix}"
+
+            raw_sum = score_data.get("raw_task_sum", 0.0)
+            peer_mult = score_data.get("peer_multiplier", 1.0)
+            formula_str = f"📐 *Formula: ({raw_sum:.1f} tasks × {peer_mult}x peer) + {bonus_pts:.1f} bonus = {final_score:.1f} pts*"
+
             val = (
-                f"🏆 **Win:** {ai_eval.get('praise_text', 'Consistent execution.')}\n"
-                f"⚙️ **Peer Modifier:** {score_data['peer_multiplier']}x "
-                f"(✅ {score_data['emoji_counts']['✅']} | 🔥 {score_data['emoji_counts']['🔥']} | ⚠️ {score_data['emoji_counts']['⚠️']})\n"
+                f"📊 **Points Breakdown:**\n"
+                f"{tasks_str}\n"
+                f"{bonus_str}\n"
+                f"⚙️ **Peer Modifier:** {peer_mult}x (✅ {score_data['emoji_counts']['✅']} | 🔥 {score_data['emoji_counts']['🔥']} | ⚠️ {score_data['emoji_counts']['⚠️']})\n"
+                f"{formula_str}\n\n"
+                f"🏆 **Win:** {ai_eval.get('praise_text', 'Consistent execution.')}\n\n"
                 f"💡 **Thiel Critique:** {ai_eval.get('feedback_text', 'Keep momentum.')}"
             )
             if len(val) > 1024:
                 val = val[:1020] + "..."
 
             summary_fields.append({
-                "name": f"{info['display_name']} ({info['role']}) — {final_score:.1f} pts",
+                "name": f"{info['display_name']} ({info['role']}) — {final_score:.1f} pts ({len(updates)} updates)",
                 "value": val,
                 "inline": False,
             })
+            await asyncio.sleep(1.0)
 
         # Sort leaderboard
         leaderboard_ranks.sort(key=lambda x: x[3], reverse=True)
