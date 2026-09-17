@@ -124,15 +124,15 @@ class TrackerCog(commands.Cog):
                 pass
 
             task_summary = "\n".join([
-                f"• **{t.get('task')}** (Weight: {t.get('complexity')}/5 | Dharma: {t.get('dharma_multiplier')}x)\n  *Justification: {t.get('dharma_reason', 'Aligned with founder role')}*"
+                f"• **{t.get('task')}** (Size: {t.get('complexity')}/5)\n  *Why it matters: {t.get('dharma_reason', 'Great for this role')}*"
                 for t in parsed_tasks
             ])
             embed = discord.Embed(
-                title=f"🔒 Commitments Locked • {FOUNDERS[founder_key]['display_name']} ({FOUNDERS[founder_key]['role']})",
-                description=f"Target Date: **{target_date}**\n\n{task_summary}",
+                title=f"🔒 Plan Saved • {FOUNDERS[founder_key]['display_name']} ({FOUNDERS[founder_key]['role']})",
+                description=f"Goals for: **{target_date}**\n\n{task_summary}",
                 color=COLOR_SUCCESS
             )
-            embed.set_footer(text="Krishna Engineering OS • Evaluated by Peter Thiel at 8:00 PM tomorrow")
+            embed.set_footer(text="Peter Thiel Review Bot • Scored tomorrow at 8:00 PM")
             await message.reply(embed=embed, mention_author=False)
             return
 

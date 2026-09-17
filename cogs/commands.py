@@ -81,16 +81,15 @@ class CommandsCog(commands.Cog):
 
         tasks_list = record.get("parsed_goals", [])
         desc = "\n".join([
-            f"• **{t.get('task')}** (Weight: {t.get('complexity')}/5 | Dharma: {t.get('dharma_multiplier')}x)\n  *Reason: {t.get('dharma_reason', 'N/A')}*"
+            f"• **{t.get('task')}** (Size: {t.get('complexity')}/5)\n  *Why it matters: {t.get('dharma_reason', 'Great for this role')}*"
             for t in tasks_list
         ])
 
         embed = discord.Embed(
-            title=f"🎯 Locked Goals: {display_name} • {target_date}",
+            title=f"🎯 Planned Goals: {display_name} • {target_date}",
             description=desc,
             color=COLOR_PRIMARY
         )
-        embed.set_footer(text=f"Raw text: {record.get('raw_text')[:100]}...")
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="score", description="Check daily score and breakdown")
@@ -121,13 +120,13 @@ class CommandsCog(commands.Cog):
         embed = discord.Embed(
             title=f"📊 Score Report: {display_name} • {target_date}",
             description=(
-                f"**Final Krishna OS Score:** **{record['final_score']:.2f} pts**\n\n"
-                f"• **Raw Task Sum:** {breakdown.get('raw_task_sum', 0.0):.2f}\n"
-                f"• **Peer Multiplier ($M_{{peer}}$):** {breakdown.get('peer_multiplier', 1.0)}x "
+                f"**Total Score:** **{record['final_score']:.2f} pts**\n\n"
+                f"• **Task Points:** {breakdown.get('raw_task_sum', 0.0):.2f}\n"
+                f"• **Team Boost:** {breakdown.get('peer_multiplier', 1.0)}x "
                 f"(✅ {breakdown.get('emoji_counts', {}).get('✅', 0)} | 🔥 {breakdown.get('emoji_counts', {}).get('🔥', 0)} | ⚠️ {breakdown.get('emoji_counts', {}).get('⚠️', 0)})\n"
-                f"• **Spontaneous Bonus ($I_{{bonus}}$):** +{breakdown.get('bonus_points', 0.0):.2f}\n\n"
-                f"🏆 **Win of the Day:** {record.get('praise_text', 'N/A')}\n"
-                f"⚙️ **Systems Feedback:** {record.get('feedback_text', 'N/A')}"
+                f"• **Bonus Points:** +{breakdown.get('bonus_points', 0.0):.2f}\n\n"
+                f"🏆 **What went great:** {record.get('praise_text', 'N/A')}\n"
+                f"💡 **Advice from Peter:** {record.get('feedback_text', 'N/A')}"
             ),
             color=COLOR_SUCCESS
         )

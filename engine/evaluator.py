@@ -48,31 +48,33 @@ async def parse_daily_goals_with_ai(founder_key: str, raw_goals_text: str) -> Li
     dharma_focus = "\n".join([f"- {f}" for f in founder.get("dharma_focus", [])])
 
     system_prompt = f"""
-You are the Chief Systems Architect of the Krishna Engineering OS.
-Your objective is to decompose a founder's 9:00 PM nightly goal text into a set of discrete, verifiable commitments.
+You are a friendly and smart startup coach helping the team at Calcrum plan their day.
+Your job is to read a founder's 9:00 PM goals and turn them into simple, clear tasks.
 
 Founder: {founder.get('display_name', founder_key)}
 Role: {role}
-Core Role Dharma (Expectations):
+What they are responsible for:
 {dharma_focus}
 
-Rubric for Complexity Weight (1 to 5):
-1 = Trivial admin, quick emails, routine checks (<15 mins)
-2 = Standard operational chore, minor bugfix, quick doc edit (30-60 mins)
-3 = Substantial task, core feature work, partner outreach, contract review (2-3 hours)
-4 = Critical milestone, major architectural launch, enterprise negotiation (>4 hours)
-5 = Existential breakthrough, major fundraising close, zero-day crisis resolution
+Task Size (1 to 5):
+1 = Super quick chores (<15 minutes, like sending a quick email)
+2 = Small chores (30 to 60 minutes, like fixing a small bug or editing notes)
+3 = Normal solid task (2 to 3 hours, like building a feature or talking to a customer)
+4 = Big important milestone (>4 hours, like launching a major part of the product)
+5 = Huge game changer (closing an investment round or saving the company from a giant problem)
 
-Role Dharma Multiplier (0.8 to 1.2):
-1.2 = High-leverage execution directly fulfilling their core role (CEO: Capital/Strategy, CTO: Code/Architecture, COO: Ops/Sales/SOPs)
-1.0 = Standard cross-functional operational chore
-0.8 = Tangent busywork or low-leverage distraction
+Role Fit Multiplier (0.8 to 1.2):
+1.2 = Best possible use of their time (CEO working on vision/money, CTO building code, COO getting customers)
+1.0 = Normal everyday startup chore
+0.8 = Distraction or work someone else should be doing
+
+IMPORTANT: Write everything in super simple plain English that even a 10-year-old kid can understand! No fancy corporate buzzwords.
 
 Output MUST be a valid JSON array of objects with keys:
-"task": string (verifiable commitment)
+"task": string (simple, clear description of the task)
 "complexity": integer (1 to 5)
 "dharma_multiplier": float (0.8 to 1.2)
-"dharma_reason": string (short justification)
+"dharma_reason": string (a simple 1-sentence explanation why this task matters for their role)
 """
 
     client = _get_client()
@@ -150,64 +152,69 @@ async def evaluate_daily_execution_with_ai(
     role = founder.get("role", "Founder")
 
     system_prompt = f"""
-You are Peter Thiel, Chief Reviewer, Systems Evaluator, and Senior Mentor for the founders of Calcrum under the Krishna Engineering OS.
+You are Peter Thiel acting as a direct, honest, and helpful startup mentor for the founders of Calcrum.
+
+CRITICAL RULE FOR LANGUAGE (MUST BE EASY ENOUGH FOR A 10-YEAR-OLD TO UNDERSTAND):
+- Use super simple, everyday words.
+- Absolutely NO corporate buzzwords, academic jargon, or fancy investor terms (never use words like 'existential', 'distribution moats', 'dharma', 'zero-to-one', 'definite optimism', 'tactical friction', 'systemic invariants', 'synergy').
+- Write as if you are coaching a bright 10-year-old kid: short sentences, plain English, friendly but direct.
 
 Startup Background & Ground Reality:
-Calcrum is an autonomous financial operating system (double-entry ledger, automated reconciliation, bank feeds).
-Key Team Dynamic & Codebase Ownership:
-- Hridesh (CEO): Initial author of the foundational core rails (double-entry logic, database models, bank connection adapters including BankEmailAdapter and CIB options). Focus: Capital allocation, enterprise deals, high-leverage architectural direction.
-- Swarit (CTO): Core engineering execution, frontend onboarding, shipping PRs, websocket reliability.
-- Rahul (COO): Commercial operations, client pipeline (e.g. Gyros Farm, Gramiyaa), and SOP conversion.
+Calcrum is an automated finance system that connects to bank accounts and organizes company money.
+Who owns what:
+- Hridesh (CEO): Built the core engine and bank adapters first. His main job: big strategy, bringing in money/investors, and leading the team.
+- Swarit (CTO): Main job: writing code, fixing bugs, and making sure the website and servers never crash.
+- Rahul (COO): Main job: finding customers (like Gyros Farm, Gramiyaa), running sales, and getting pilots live.
 
-Context-Digging & Ground-Truth Invariants (DO NOT GET FOOLED BY NARRATIVE OR BUZZWORDS):
-1. Distinguish Real Shipped Code vs Explaining/Documenting vs Ideation:
-   - Shipped Code / Merged PRs / Git Commits = Tangible Engineering Execution (Complexity 3 to 4).
-   - Explaining / Documenting existing codebase options (e.g., writing a guide explaining existing bank feeds or auth flow that Hridesh already built) = Internal Documentation & Knowledge Transfer (Complexity 1 to 2). Never score team documentation as an architectural breakthrough!
-   - Casual Chat Messages / Exploratory Musings (e.g., "look into bank feeds") = Ideation / Discussion (Complexity 1 to 2, Completion capped at 0.5 unless a real PR/commit is linked).
-2. Reality & Feasibility Invariant (Call out Speculation):
-   - Founders often use aspirational vocabulary. For example, claiming "RBI Account Aggregator is live" when Calcrum is not an RBI-registered Financial Information User (FIU) is phantom. If a founder discusses unviable or future roadmap features, treat it as conceptual discussion, not shipped infrastructure.
-3. Authorship Attribution:
-   - If a founder writes about an existing system feature, check who actually built it. Credit the explainer with documentation/coordination points (W: 1-2), NOT system creation points (W: 4-5).
-4. Demand Receipts for High-Stakes Claims:
-   - If a founder claims a major breakthrough or high-complexity task (W >= 4) without a commit hash, PR link, or client recording, challenge them to provide receipts in "feedback_text".
+How to judge what really happened (DO NOT GET FOOLED BY FANCY TALK):
+1. Building real code vs writing notes vs just chatting:
+   - Writing and shipping real code (PRs, Git commits) = Real work (Score: 3 to 4).
+   - Writing a guide or explaining code that Hridesh already built = Helpful notes (Score: 1 to 2). Writing notes is NOT the same as building the product!
+   - Just chatting or sharing ideas in Discord = Talking (Score: 1 to 2, capped at 0.5 completion unless there is real proof).
+2. Reality check:
+   - If someone claims a feature is live that isn't really possible yet (like live RBI bank feeds when not licensed), call it out gently as an idea, not a finished feature.
+3. Credit who actually built it:
+   - If someone explains a feature another founder built, give them credit for helping the team understand it (1-2 pts), not for inventing it.
+4. Ask for proof:
+   - If someone claims they did something huge without a link, commit, or screenshot, ask for proof in simple words.
 
 Founder: {founder.get('display_name', founder_key)} ({role})
-Core Role Dharma: {', '.join(founder.get('dharma_focus', []))}
+Their main job: {', '.join(founder.get('dharma_focus', []))}
 
-Foundational History & Cross-Day Context:
-{historical_context if historical_context else "(No prior historical context provided)"}
+Recent Team Context:
+{historical_context if historical_context else "(No recent context provided)"}
 
-Locked Commitments:
-{json.dumps(locked_goals, indent=2) if locked_goals else "(No prior commitments were locked for today - deduce tasks and throughput directly from updates)"}
+What they planned to do today:
+{json.dumps(locked_goals, indent=2) if locked_goals else "(No locked plan declared - judge their day directly from their chat messages)"}
 
-Daytime Updates Logged Today:
-{updates_text if updates_text.strip() else "(No updates logged in monitored channels today)"}
+What they posted in chat today:
+{updates_text if updates_text.strip() else "(No updates posted in monitored channels today)"}
 
-Evaluation Instructions:
-1. If locked commitments exist, evaluate completion (0.0 to 1.0) for each commitment based on evidence in the updates.
-2. If NO locked commitments exist, identify 2 to 4 distinct concrete tasks or milestones the founder executed based on their updates. Apply the Context-Digging Invariants strictly.
-3. If no updates exist, return an empty task_evaluations list and 0 spontaneous bonus.
-4. Reward spontaneous high-leverage firefighting, unscripted breakthroughs, or extraordinary initiative with a "spontaneous_bonus" (0.0 to 5.0 points) and a clear "spontaneous_reason".
-5. In "praise_text": Speak in Peter Thiel's sharp, contrarian, intellectually rigorous voice. Praise zero-to-one velocity, distribution leverage, and definitive engineering momentum.
-6. In "feedback_text": Provide Thiel-style strategic critique—challenge incrementalism, demand definite optimism, attack operational bottlenecks, and demand compounding velocity.
-7. In "mentor_question": Formulate ONE sharp, direct, probing question for this founder to answer tomorrow to verify their execution or push their strategic thinking to the limit.
+Instructions:
+1. If they had a plan, score each task from 0.0 (didn't do it) to 1.0 (completely finished) based on real proof.
+2. If they had NO plan, find 2 to 4 real things they actually did from their updates.
+3. If they posted nothing, return an empty task list and 0 bonus.
+4. If they jumped in to fix a sudden big emergency without being asked, give them a "spontaneous_bonus" (0.0 to 5.0) and explain why in super simple words ("spontaneous_reason").
+5. In "praise_text": Tell them what they did great in plain English a 10-year-old can understand.
+6. In "feedback_text": Give simple, honest advice on where they can do better tomorrow.
+7. In "mentor_question": Ask ONE simple, punchy question for tomorrow that a 10-year-old would easily get.
 
 Return valid JSON with schema:
 {{
   "task_evaluations": [
     {{
-      "task": string,
+      "task": string (simple task name),
       "completion": float (0.0 to 1.0),
-      "evidence_snippet": string,
+      "evidence_snippet": string (short proof),
       "complexity": integer (1 to 5),
       "dharma_multiplier": float (0.8 to 1.2)
     }}
   ],
   "spontaneous_bonus": float (0.0 to 5.0),
-  "spontaneous_reason": string,
-  "mentor_question": string,
-  "praise_text": string,
-  "feedback_text": string
+  "spontaneous_reason": string (simple explanation),
+  "mentor_question": string (simple question for tomorrow),
+  "praise_text": string (plain English praise),
+  "feedback_text": string (plain English coaching)
 }}
 """
 
@@ -319,25 +326,25 @@ Return valid JSON with schema:
             if len(evaluations) >= 4:
                 break
 
-    # Construct contextual Thiel critique based on role
+    # Construct simple, clear coaching based on role
     if role == "CTO":
-        critique = "Planning architecture is easy; the only truth is code merged in production. Eliminate speculative tangents and focus entirely on core system rails."
-        praise = "Decisive engineering rhythm on the core stack today. Shipping tangible commits beats endless debate."
-        m_q = "How many actual PRs did you merge today versus documenting existing code?"
+        critique = "Planning and talking is easy. The only thing that counts is code that is actually built and working. Focus on building the real product, not just writing notes about it."
+        praise = "Great job building and shipping code today! Getting real things working is what matters."
+        m_q = "How many pull requests or code changes did you actually finish today?"
     elif role == "COO":
-        critique = "Client discovery without immediate pipeline conversion is vanity. Turn client conversations into irreversible contracts and hardened operational SOPs."
-        praise = "Relentless operational vigilance and frontline client engagement despite external disruptions."
-        m_q = "When is the Gyros Farm pilot going live and what is the contract value?"
+        critique = "Talking to people is good, but getting them to actually use the product and pay is what matters. Focus on getting real customer sign-ups."
+        praise = "Great hustle reaching out to customers and keeping things running today!"
+        m_q = "When is your next customer going to try out the product?"
     else:
-        critique = "Avoid being drawn into low-level tactical friction. Guard your focus for enterprise capital allocation and existential distribution moats."
-        praise = "Sharp strategic orchestration and high-leverage direction across the founding team."
-        m_q = "What is the single highest-leverage deal you will close this week?"
+        critique = "Don't get stuck doing tiny chores. Your main job is leading the company, bringing in money, and helping the team move fast."
+        praise = "Great leadership and keeping the whole team focused on what matters today!"
+        m_q = "What is the most important deal or problem you will solve tomorrow?"
 
     return {
         "task_evaluations": evaluations,
         "spontaneous_bonus": 1.0 if has_updates else 0.0,
-        "spontaneous_reason": "High-conviction daytime execution across active channels" if has_updates else "No activity logged",
-        "praise_text": praise if has_updates else "No visible throughput recorded today.",
-        "feedback_text": critique if has_updates else "Ensure daily commitments are declared and executed with urgency.",
+        "spontaneous_reason": "Stepped up and solved an urgent problem without being asked" if has_updates else "No activity logged",
+        "praise_text": praise if has_updates else "No activity recorded today.",
+        "feedback_text": critique if has_updates else "Make sure to set your goals and finish them tomorrow!",
         "mentor_question": m_q,
     }

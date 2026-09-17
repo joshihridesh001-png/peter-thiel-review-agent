@@ -220,17 +220,17 @@ class SchedulerCog(commands.Cog):
             return
 
         embed = discord.Embed(
-            title="🌙 9:00 PM Commitment Lock • Declare Tomorrow's Goals",
+            title="🌙 9:00 PM Check-In • What's your plan for tomorrow?",
             description=(
-                "Team, before sleeping, declare your top 2-4 core commitments for tomorrow in this channel.\n\n"
-                "• **Hridesh (CEO)**: Strategy, fundraising, major deals, bottleneck removal\n"
-                "• **Swarit (CTO)**: Code architecture, shipping PRs, uptime & reliability\n"
-                "• **Rahul (COO)**: Operations velocity, sales pipeline, SOP execution\n\n"
-                "Format: Freeform bullets or numbered list. Gemini will parse complexity ($W_i$) and Role Dharma ($A_{dharma}$)."
+                "Team, before you head to bed, drop 2 to 4 big things you want to finish tomorrow:\n\n"
+                "• **Hridesh (CEO)**: Big deals, investors, and company direction\n"
+                "• **Swarit (CTO)**: Writing code, fixing bugs, and making the product work\n"
+                "• **Rahul (COO)**: Talking to customers, pilots, and daily operations\n\n"
+                "Just write a quick list in this channel!"
             ),
             color=COLOR_PRIMARY
         )
-        embed.set_footer(text="Krishna Engineering OS • 60-Second Frictionless Check-In")
+        embed.set_footer(text="Calcrum Review Bot • 60-Second Check-In")
         await channel.send(embed=embed)
 
     async def run_goals_nudge(self, today_str: str):
@@ -250,15 +250,15 @@ class SchedulerCog(commands.Cog):
 
         if missing:
             embed = discord.Embed(
-                title="⚠️ 9:30 PM Commitment Nudge • Declare Deliverables",
+                title="⚠️ 9:30 PM Quick Reminder • Don't forget your goals!",
                 description=(
-                    f"Awaiting tomorrow's commitments from: {', '.join(missing)}\n\n"
-                    "Declare your 2-4 core commitments before logging off. "
-                    "Unscripted days lead to reactive entropy."
+                    f"Still waiting for tomorrow's plan from: {', '.join(missing)}\n\n"
+                    "Take 60 seconds to share what you plan to finish tomorrow before you go to sleep. "
+                    "Starting tomorrow with a clear plan makes everything easier!"
                 ),
                 color=COLOR_WARNING
             )
-            embed.set_footer(text="Krishna Engineering OS • 60-Second Check-In")
+            embed.set_footer(text="Calcrum Review Bot • 60-Second Check-In")
             await channel.send(embed=embed)
 
     async def run_daily_scoring(self, today_str: str):
@@ -347,36 +347,36 @@ class SchedulerCog(commands.Cog):
                 comp_pct = int(t.get("completion", 0.0) * 100)
                 w = int(t.get("complexity", 3))
                 pts = t.get("task_points", 0.0)
-                task_lines.append(f"• **{task_desc}** (W:{w}/5, {comp_pct}%) → **+{pts:.1f} pts**")
+                task_lines.append(f"• **{task_desc}** (Size: {w}/5, {comp_pct}% done) → **+{pts:.1f} pts**")
 
-            tasks_str = "\n".join(task_lines) if task_lines else "• *No verified tasks recorded today*"
+            tasks_str = "\n".join(task_lines) if task_lines else "• *No tasks finished today*"
             bonus_pts = score_data.get("bonus_points", 0.0)
             bonus_reason = ai_eval.get("spontaneous_reason", "")
             bonus_suffix = f" *({bonus_reason[:35]})*" if bonus_reason else ""
-            bonus_str = f"• **Spontaneous Bonus:** +{bonus_pts:.1f} pts{bonus_suffix}"
+            bonus_str = f"• **Bonus Points:** +{bonus_pts:.1f} pts{bonus_suffix}"
 
             raw_sum = score_data.get("raw_task_sum", 0.0)
             peer_mult = score_data.get("peer_multiplier", 1.0)
-            formula_str = f"📐 *Formula: ({raw_sum:.1f} tasks × {peer_mult}x peer) + {bonus_pts:.1f} bonus = {final_score:.1f} pts*"
+            formula_str = f"📐 *How it's counted: ({raw_sum:.1f} task pts × {peer_mult}x team boost) + {bonus_pts:.1f} bonus = {final_score:.1f} pts*"
 
             m_q = ai_eval.get("mentor_question", "")
-            m_q_section = f"\n\n❓ **Mentor Query for Tomorrow:** *\"{m_q}\"*" if m_q else ""
+            m_q_section = f"\n\n❓ **Question for Tomorrow:** *\"{m_q}\"*" if m_q else ""
 
             val = (
-                f"📊 **Points Breakdown:**\n"
+                f"📊 **Score Details:**\n"
                 f"{tasks_str}\n"
                 f"{bonus_str}\n"
-                f"⚙️ **Peer Modifier:** {peer_mult}x (✅ {score_data['emoji_counts']['✅']} | 🔥 {score_data['emoji_counts']['🔥']} | ⚠️ {score_data['emoji_counts']['⚠️']})\n"
+                f"👍 **Team Boost:** {peer_mult}x (✅ {score_data['emoji_counts']['✅']} | 🔥 {score_data['emoji_counts']['🔥']} | ⚠️ {score_data['emoji_counts']['⚠️']})\n"
                 f"{formula_str}\n\n"
-                f"🏆 **Win:** {ai_eval.get('praise_text', 'Consistent execution.')}\n\n"
-                f"💡 **Thiel Critique:** {ai_eval.get('feedback_text', 'Keep momentum.')}"
+                f"🏆 **What went great:** {ai_eval.get('praise_text', 'Good steady work today.')}\n\n"
+                f"💡 **Advice from Peter:** {ai_eval.get('feedback_text', 'Keep building and moving fast.')}"
                 f"{m_q_section}"
             )
             if len(val) > 1024:
                 val = val[:1020] + "..."
 
             summary_fields.append({
-                "name": f"{info['display_name']} ({info['role']}) — {final_score:.1f} pts ({len(updates)} updates)",
+                "name": f"{info['display_name']} ({info['role']}) — {final_score:.1f} pts",
                 "value": val,
                 "inline": False,
             })
@@ -388,13 +388,13 @@ class SchedulerCog(commands.Cog):
 
         embed = discord.Embed(
             title=f"🌆 8:00 PM Daily Scorecard • {today_str}",
-            description=f"Top Contributor Today: 👑 **{top_name}**\nKrishna OS daily evaluation completed across all channels.",
+            description=f"MVP of the Day: 👑 **{top_name}**\nHere is how everyone did today!",
             color=COLOR_SUCCESS,
         )
         for field in summary_fields:
             embed.add_field(name=field["name"], value=field["value"], inline=field["inline"])
 
-        embed.set_footer(text="Scores logged to persistent SQLite ledger • Reversible within 24h via /override")
+        embed.set_footer(text="Calcrum Review Bot • Scores are saved automatically every night")
         await channel.send(embed=embed)
 
     async def run_weekly_swot(self):
