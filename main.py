@@ -53,25 +53,25 @@ async def on_ready():
     except Exception as e:
         logger.error(f"Failed to sync slash commands: {e}")
 
-    # Send test deployment confirmation embed to Discord
-    try:
-        channel = bot.get_channel(PRIMARY_GOALS_CHANNEL_ID)
-        if channel:
-            embed = discord.Embed(
-                title="☁️ Peter Thiel: Cloud Deployment Live",
-                description=(
-                    "**Status:** 🟢 **Online from Render Cloud**\n"
-                    "**Architecture:** Docker Container • Port 10000 (/healthz)\n"
-                    "**Timezone:** Asia/Kolkata (IST)\n\n"
-                    "*\"The test deployment from Render succeeded. Continuous 24/7 monitoring is active.\"*"
-                ),
-                color=0x2ECC71,
-            )
-            embed.set_footer(text="Render.com • Automated Cloud Health Verified")
-            await channel.send(embed=embed)
-            logger.info("Sent cloud deployment test message to Discord.")
-    except Exception as e:
-        logger.error(f"Failed to send startup test message: {e}")
+    # Optional startup test message (disabled by default to prevent spam)
+    if os.getenv("SEND_STARTUP_MSG", "false").lower() == "true":
+        try:
+            channel = bot.get_channel(PRIMARY_GOALS_CHANNEL_ID)
+            if channel:
+                embed = discord.Embed(
+                    title="🟢 Peter Thiel Review Agent Live",
+                    description=(
+                        "**Status:** 🟢 **Active & Monitoring**\n"
+                        "**Timezone:** Asia/Kolkata (IST)\n\n"
+                        "*\"Listening to founder channels. 8:00 PM scoring and 9:00 PM commitment locks armed.\"*"
+                    ),
+                    color=0x2ECC71,
+                )
+                embed.set_footer(text="Krishna Engineering OS • Active")
+                await channel.send(embed=embed)
+                logger.info("Sent startup message to Discord.")
+        except Exception as e:
+            logger.error(f"Failed to send startup test message: {e}")
 
 
 import os
