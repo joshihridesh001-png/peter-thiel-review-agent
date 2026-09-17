@@ -75,6 +75,7 @@ Output MUST be a valid JSON array of objects with keys:
 "complexity": integer (1 to 5)
 "dharma_multiplier": float (0.8 to 1.2)
 "dharma_reason": string (a simple 1-sentence explanation why this task matters for their role)
+"score_reason": string (a simple 1-sentence explanation why you gave it this size score 1-5 and why it is worth these points)
 """
 
     client = _get_client()
@@ -104,6 +105,7 @@ Output MUST be a valid JSON array of objects with keys:
                     for item in parsed:
                         item["complexity"] = max(1, min(5, int(item.get("complexity", 3))))
                         item["dharma_multiplier"] = max(0.8, min(1.2, float(item.get("dharma_multiplier", 1.0))))
+                        item["score_reason"] = str(item.get("score_reason", item.get("dharma_reason", f"Rated size {item['complexity']}/5 based on task scope.")))
                     return parsed
             except Exception as e:
                 logger.warning(f"Model {model_name} parse failed: {e}")
@@ -126,6 +128,7 @@ Output MUST be a valid JSON array of objects with keys:
             "complexity": complexity,
             "dharma_multiplier": 1.0,
             "dharma_reason": "Heuristic fallback assignment",
+            "score_reason": f"Rated size {complexity}/5 based on estimated effort.",
         })
 
     return tasks if tasks else [{
@@ -133,6 +136,7 @@ Output MUST be a valid JSON array of objects with keys:
         "complexity": 3,
         "dharma_multiplier": 1.0,
         "dharma_reason": "Default commitment",
+        "score_reason": "Default commitment size 3/5.",
     }]
 
 
@@ -207,7 +211,8 @@ Return valid JSON with schema:
       "completion": float (0.0 to 1.0),
       "evidence_snippet": string (short proof),
       "complexity": integer (1 to 5),
-      "dharma_multiplier": float (0.8 to 1.2)
+      "dharma_multiplier": float (0.8 to 1.2),
+      "score_reason": string (CRITICAL: A simple 1-sentence explanation of WHY you gave this completion score and size. E.g. "Full score: merged PR #14 and verified bank login" or "Half credit: discussed in chat but didn't write code yet" or "Zero score: no updates or proof found today")
     }}
   ],
   "spontaneous_bonus": float (0.0 to 5.0),
@@ -251,6 +256,7 @@ Return valid JSON with schema:
                             "evidence_snippet": str(t.get("evidence_snippet", ""))[:120],
                             "complexity": max(1, min(5, int(t.get("complexity", 3)))),
                             "dharma_multiplier": max(0.8, min(1.2, float(t.get("dharma_multiplier", 1.0)))),
+                            "score_reason": str(t.get("score_reason", t.get("evidence_snippet", "Score based on verified activity")))[:150],
                         })
                     data["task_evaluations"] = cleaned_tasks
                     data["spontaneous_bonus"] = max(0.0, min(5.0, float(data.get("spontaneous_bonus", 0.0))))
@@ -275,12 +281,14 @@ Return valid JSON with schema:
     if locked_goals:
         for g in locked_goals:
             comp = 0.85 if has_updates else 0.0
+            reason = "Saw active progress and messages about this in chat today." if has_updates else "No messages or proof found in chat today."
             evaluations.append({
                 "task": g.get("task", ""),
                 "completion": comp,
                 "evidence_snippet": "Verified activity from channel updates" if has_updates else "No activity recorded",
                 "complexity": max(1, min(5, int(g.get("complexity", 3)))),
                 "dharma_multiplier": max(0.8, min(1.2, float(g.get("dharma_multiplier", 1.0)))),
+                "score_reason": reason,
             })
     elif has_updates:
         # Extract up to 4 meaningful task topics from lines
@@ -322,6 +330,7 @@ Return valid JSON with schema:
                 "evidence_snippet": cleaned[:100],
                 "complexity": complexity,
                 "dharma_multiplier": dharma,
+                "score_reason": f"Activity confirmed in chat: {cleaned[:60]}",
             })
             if len(evaluations) >= 4:
                 break

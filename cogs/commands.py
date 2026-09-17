@@ -81,7 +81,7 @@ class CommandsCog(commands.Cog):
 
         tasks_list = record.get("parsed_goals", [])
         desc = "\n".join([
-            f"• **{t.get('task')}** (Size: {t.get('complexity')}/5)\n  *Why it matters: {t.get('dharma_reason', 'Great for this role')}*"
+            f"• **{t.get('task')}** (Size: {t.get('complexity')}/5)\n  💬 *Why this score: {t.get('score_reason', t.get('dharma_reason', 'Important task for your role'))}*"
             for t in tasks_list
         ])
 
@@ -117,11 +117,29 @@ class CommandsCog(commands.Cog):
             return
 
         breakdown = record["breakdown_json"]
+        task_lines = []
+        for t in breakdown.get("task_breakdown", []):
+            task_desc = t.get("task", "Task")
+            if len(task_desc) > 38:
+                task_desc = task_desc[:35] + "..."
+            comp_pct = int(t.get("completion", 0.0) * 100)
+            w = int(t.get("complexity", 3))
+            pts = t.get("task_points", 0.0)
+            reason = t.get("score_reason", "").strip()
+            entry = f"• **{task_desc}** (Size: {w}/5, {comp_pct}% done) → **+{pts:.1f} pts**"
+            if reason:
+                if len(reason) > 75:
+                    reason = reason[:72] + "..."
+                entry += f"\n  💬 *Why: {reason}*"
+            task_lines.append(entry)
+
+        tasks_str = "\n".join(task_lines) if task_lines else "• *No tasks recorded*"
+
         embed = discord.Embed(
             title=f"📊 Score Report: {display_name} • {target_date}",
             description=(
                 f"**Total Score:** **{record['final_score']:.2f} pts**\n\n"
-                f"• **Task Points:** {breakdown.get('raw_task_sum', 0.0):.2f}\n"
+                f"**Tasks Evaluated:**\n{tasks_str}\n\n"
                 f"• **Team Boost:** {breakdown.get('peer_multiplier', 1.0)}x "
                 f"(✅ {breakdown.get('emoji_counts', {}).get('✅', 0)} | 🔥 {breakdown.get('emoji_counts', {}).get('🔥', 0)} | ⚠️ {breakdown.get('emoji_counts', {}).get('⚠️', 0)})\n"
                 f"• **Bonus Points:** +{breakdown.get('bonus_points', 0.0):.2f}\n\n"

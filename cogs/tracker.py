@@ -124,7 +124,7 @@ class TrackerCog(commands.Cog):
                 pass
 
             task_summary = "\n".join([
-                f"• **{t.get('task')}** (Size: {t.get('complexity')}/5)\n  *Why it matters: {t.get('dharma_reason', 'Great for this role')}*"
+                f"• **{t.get('task')}** (Size: {t.get('complexity')}/5)\n  💬 *Why this score: {t.get('score_reason', t.get('dharma_reason', 'Important task for your role'))}*"
                 for t in parsed_tasks
             ])
             embed = discord.Embed(

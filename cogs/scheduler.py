@@ -347,7 +347,13 @@ class SchedulerCog(commands.Cog):
                 comp_pct = int(t.get("completion", 0.0) * 100)
                 w = int(t.get("complexity", 3))
                 pts = t.get("task_points", 0.0)
-                task_lines.append(f"• **{task_desc}** (Size: {w}/5, {comp_pct}% done) → **+{pts:.1f} pts**")
+                reason = t.get("score_reason", "").strip()
+                entry = f"• **{task_desc}** (Size: {w}/5, {comp_pct}% done) → **+{pts:.1f} pts**"
+                if reason:
+                    if len(reason) > 75:
+                        reason = reason[:72] + "..."
+                    entry += f"\n  💬 *Why: {reason}*"
+                task_lines.append(entry)
 
             tasks_str = "\n".join(task_lines) if task_lines else "• *No tasks finished today*"
             bonus_pts = score_data.get("bonus_points", 0.0)
