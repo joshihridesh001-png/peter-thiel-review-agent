@@ -138,34 +138,59 @@ async def evaluate_daily_execution_with_ai(
     founder_key: str,
     locked_goals: List[Dict[str, Any]],
     updates_text: str,
+    historical_context: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Evaluate daytime updates against locked goals using Gemini.
-    Computes completion rate (0.0 to 1.0) per task, emergent impact bonus, praise, and constructive critique.
+    Acts as an inquisitive senior mentor (Peter Thiel) who digs for context,
+    distinguishes code from documentation, verifies legal/technical invariants,
+    and asks probing questions.
     """
     founder = FOUNDERS.get(founder_key.lower(), {})
     role = founder.get("role", "Founder")
 
     system_prompt = f"""
-You are Peter Thiel, Chief Reviewer and Systems Evaluator for the Krishna Engineering OS.
-Evaluate the founder's daily throughput by analyzing their daytime channel updates and comparing against locked commitments.
+You are Peter Thiel, Chief Reviewer, Systems Evaluator, and Senior Mentor for the founders of Calcrum under the Krishna Engineering OS.
+
+Startup Background & Ground Reality:
+Calcrum is an autonomous financial operating system (double-entry ledger, automated reconciliation, bank feeds).
+Key Team Dynamic & Codebase Ownership:
+- Hridesh (CEO): Initial author of the foundational core rails (double-entry logic, database models, bank connection adapters including BankEmailAdapter and CIB options). Focus: Capital allocation, enterprise deals, high-leverage architectural direction.
+- Swarit (CTO): Core engineering execution, frontend onboarding, shipping PRs, websocket reliability.
+- Rahul (COO): Commercial operations, client pipeline (e.g. Gyros Farm, Gramiyaa), and SOP conversion.
+
+Context-Digging & Ground-Truth Invariants (DO NOT GET FOOLED BY NARRATIVE OR BUZZWORDS):
+1. Distinguish Real Shipped Code vs Explaining/Documenting vs Ideation:
+   - Shipped Code / Merged PRs / Git Commits = Tangible Engineering Execution (Complexity 3 to 4).
+   - Explaining / Documenting existing codebase options (e.g., writing a guide explaining existing bank feeds or auth flow that Hridesh already built) = Internal Documentation & Knowledge Transfer (Complexity 1 to 2). Never score team documentation as an architectural breakthrough!
+   - Casual Chat Messages / Exploratory Musings (e.g., "look into bank feeds") = Ideation / Discussion (Complexity 1 to 2, Completion capped at 0.5 unless a real PR/commit is linked).
+2. Reality & Feasibility Invariant (Call out Speculation):
+   - Founders often use aspirational vocabulary. For example, claiming "RBI Account Aggregator is live" when Calcrum is not an RBI-registered Financial Information User (FIU) is phantom. If a founder discusses unviable or future roadmap features, treat it as conceptual discussion, not shipped infrastructure.
+3. Authorship Attribution:
+   - If a founder writes about an existing system feature, check who actually built it. Credit the explainer with documentation/coordination points (W: 1-2), NOT system creation points (W: 4-5).
+4. Demand Receipts for High-Stakes Claims:
+   - If a founder claims a major breakthrough or high-complexity task (W >= 4) without a commit hash, PR link, or client recording, challenge them to provide receipts in "feedback_text".
 
 Founder: {founder.get('display_name', founder_key)} ({role})
 Core Role Dharma: {', '.join(founder.get('dharma_focus', []))}
 
+Foundational History & Cross-Day Context:
+{historical_context if historical_context else "(No prior historical context provided)"}
+
 Locked Commitments:
 {json.dumps(locked_goals, indent=2) if locked_goals else "(No prior commitments were locked for today - deduce tasks and throughput directly from updates)"}
 
-Channel Updates Logged Today:
+Daytime Updates Logged Today:
 {updates_text if updates_text.strip() else "(No updates logged in monitored channels today)"}
 
 Evaluation Instructions:
 1. If locked commitments exist, evaluate completion (0.0 to 1.0) for each commitment based on evidence in the updates.
-2. If NO locked commitments exist, identify 2 to 4 distinct concrete tasks or milestones the founder executed based on their updates. Assign complexity (1 to 5) and role dharma multiplier (0.8 to 1.2) for each task, and score completion.
+2. If NO locked commitments exist, identify 2 to 4 distinct concrete tasks or milestones the founder executed based on their updates. Apply the Context-Digging Invariants strictly.
 3. If no updates exist, return an empty task_evaluations list and 0 spontaneous bonus.
 4. Reward spontaneous high-leverage firefighting, unscripted breakthroughs, or extraordinary initiative with a "spontaneous_bonus" (0.0 to 5.0 points) and a clear "spontaneous_reason".
 5. In "praise_text": Speak in Peter Thiel's sharp, contrarian, intellectually rigorous voice. Praise zero-to-one velocity, distribution leverage, and definitive engineering momentum.
 6. In "feedback_text": Provide Thiel-style strategic critique—challenge incrementalism, demand definite optimism, attack operational bottlenecks, and demand compounding velocity.
+7. In "mentor_question": Formulate ONE sharp, direct, probing question for this founder to answer tomorrow to verify their execution or push their strategic thinking to the limit.
 
 Return valid JSON with schema:
 {{
@@ -180,6 +205,7 @@ Return valid JSON with schema:
   ],
   "spontaneous_bonus": float (0.0 to 5.0),
   "spontaneous_reason": string,
+  "mentor_question": string,
   "praise_text": string,
   "feedback_text": string
 }}
@@ -221,6 +247,8 @@ Return valid JSON with schema:
                         })
                     data["task_evaluations"] = cleaned_tasks
                     data["spontaneous_bonus"] = max(0.0, min(5.0, float(data.get("spontaneous_bonus", 0.0))))
+                    if not data.get("mentor_question"):
+                        data["mentor_question"] = "What is the single most critical bottleneck you will permanently solve tomorrow?"
                     return data
                 except Exception as e:
                     logger.warning(f"Model {model_name} attempt {attempt+1} failed: {e}")
@@ -263,9 +291,17 @@ Return valid JSON with schema:
             if any(w in lower_c for w in ["commit", "deploy", "build", "bug", "guide"]):
                 complexity = 3
                 dharma = 1.2 if role == "CTO" else 1.0
+            elif any(w in lower_c for w in ["guide", "doc", "onboarding", "explaining", "setup guide"]):
+                complexity = 2
+                dharma = 1.0
             elif any(w in lower_c for w in ["architecture", "auth", "finvu", "bank", "ledger"]):
-                complexity = 4
-                dharma = 1.2 if role in ["CTO", "CEO"] else 1.0
+                # Distinguish authoring vs documentation
+                if "swarit" in founder_key and any(w in lower_c for w in ["look into", "options", "guide"]):
+                    complexity = 2
+                    dharma = 1.0
+                else:
+                    complexity = 4
+                    dharma = 1.2 if role in ["CTO", "CEO"] else 1.0
             elif any(w in lower_c for w in ["client", "call", "gyros", "outbound", "lead", "pipeline"]):
                 complexity = 3
                 dharma = 1.2 if role == "COO" else 1.0
@@ -287,17 +323,21 @@ Return valid JSON with schema:
     if role == "CTO":
         critique = "Planning architecture is easy; the only truth is code merged in production. Eliminate speculative tangents and focus entirely on core system rails."
         praise = "Decisive engineering rhythm on the core stack today. Shipping tangible commits beats endless debate."
+        m_q = "How many actual PRs did you merge today versus documenting existing code?"
     elif role == "COO":
         critique = "Client discovery without immediate pipeline conversion is vanity. Turn client conversations into irreversible contracts and hardened operational SOPs."
         praise = "Relentless operational vigilance and frontline client engagement despite external disruptions."
+        m_q = "When is the Gyros Farm pilot going live and what is the contract value?"
     else:
         critique = "Avoid being drawn into low-level tactical friction. Guard your focus for enterprise capital allocation and existential distribution moats."
         praise = "Sharp strategic orchestration and high-leverage direction across the founding team."
+        m_q = "What is the single highest-leverage deal you will close this week?"
 
     return {
         "task_evaluations": evaluations,
         "spontaneous_bonus": 1.0 if has_updates else 0.0,
         "spontaneous_reason": "High-conviction daytime execution across active channels" if has_updates else "No activity logged",
         "praise_text": praise if has_updates else "No visible throughput recorded today.",
-        "feedback_text": critique if has_updates else "Ensure daily commitments are declared and executed with urgency."
+        "feedback_text": critique if has_updates else "Ensure daily commitments are declared and executed with urgency.",
+        "mentor_question": m_q,
     }

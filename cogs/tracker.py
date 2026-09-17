@@ -87,6 +87,7 @@ class TrackerCog(commands.Cog):
         if not founder_key:
             return
 
+        now = datetime.now(TIMEZONE)
         channel_id = message.channel.id
         content = message.content.strip()
 
@@ -123,16 +124,16 @@ class TrackerCog(commands.Cog):
                 pass
 
             task_summary = "\n".join([
-                f"• **{t.get('task')}** (Weight: {t.get('complexity')}/5 | Dharma: {t.get('dharma_multiplier')}x)"
+                f"• **{t.get('task')}** (Weight: {t.get('complexity')}/5 | Dharma: {t.get('dharma_multiplier')}x)\n  *Justification: {t.get('dharma_reason', 'Aligned with founder role')}*"
                 for t in parsed_tasks
             ])
             embed = discord.Embed(
-                title=f"🔒 Commitments Locked for {FOUNDERS[founder_key]['display_name']}",
+                title=f"🔒 Commitments Locked • {FOUNDERS[founder_key]['display_name']} ({FOUNDERS[founder_key]['role']})",
                 description=f"Target Date: **{target_date}**\n\n{task_summary}",
                 color=COLOR_SUCCESS
             )
-            embed.set_footer(text="Krishna Engineering OS • Evaluated at 8:00 PM tomorrow")
-            await message.channel.send(embed=embed)
+            embed.set_footer(text="Krishna Engineering OS • Evaluated by Peter Thiel at 8:00 PM tomorrow")
+            await message.reply(embed=embed, mention_author=False)
             return
 
         # Check if message is in any monitored update channels

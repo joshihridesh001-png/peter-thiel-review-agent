@@ -290,3 +290,29 @@ async def get_latest_equity_status() -> List[Dict[str, Any]]:
         """) as cursor:
             rows = await cursor.fetchall()
             return [dict(r) for r in rows]
+
+
+async def get_recent_founder_context(days: int = 3) -> str:
+    """
+    Aggregate recent score summaries, praise, and locked goals to provide
+    the AI mentor with continuous memory of who worked on what.
+    """
+    async with get_db() as db:
+        async with db.execute("""
+            SELECT founder_key, score_date, final_score, praise_text, feedback_text
+            FROM daily_scores
+            ORDER BY score_date DESC, id DESC
+            LIMIT ?;
+        """, (days * 3,)) as cursor:
+            score_rows = await cursor.fetchall()
+
+    if not score_rows:
+        return "No recent daily score logs found in the ledger."
+
+    lines = ["Recent Historical Scores & Completed Milestones:"]
+    for r in score_rows:
+        f_name = r["founder_key"].capitalize()
+        lines.append(
+            f"• [{r['score_date']}] {f_name}: Score {r['final_score']} pts | Past Milestone: {r['praise_text'][:100]}"
+        )
+    return "\n".join(lines)

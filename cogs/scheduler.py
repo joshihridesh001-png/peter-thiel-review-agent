@@ -40,6 +40,7 @@ from database.models import (
     get_scores_in_date_range,
     record_monthly_equity_tranche,
     get_latest_equity_status,
+    get_recent_founder_context,
 )
 from engine.evaluator import evaluate_daily_execution_with_ai
 from engine.scoring import compute_daily_score
@@ -61,6 +62,7 @@ class SchedulerCog(commands.Cog):
         self.bot = bot
         self.last_scored_date = ""
         self.last_prompted_goals_date = ""
+        self.last_goals_nudge_date = ""
         self.last_swot_date = ""
         self.last_equity_month = ""
         self.chronos_loop.start()
@@ -90,6 +92,12 @@ class SchedulerCog(commands.Cog):
             self.last_prompted_goals_date = today_str
             logger.info(f"Triggering 9:00 PM Goal Prompt for {today_str}")
             await self.run_daily_goals_callout()
+
+        # 2b. 9:30 PM Tomorrow's Goal Setting Nudge (for missing commitments)
+        if now.hour == 21 and now.minute >= 30 and self.last_goals_nudge_date != today_str:
+            self.last_goals_nudge_date = today_str
+            logger.info(f"Checking for missing 9:30 PM goals for {today_str}")
+            await self.run_goals_nudge(today_str)
 
         # 3. Sunday 9:00 PM Weekly Executive SWOT Analysis
         if now.weekday() == WEEKLY_SWOT_DAY and now.hour == WEEKLY_SWOT_HOUR and self.last_swot_date != today_str:
@@ -224,6 +232,34 @@ class SchedulerCog(commands.Cog):
         embed.set_footer(text="Krishna Engineering OS • 60-Second Frictionless Check-In")
         await channel.send(embed=embed)
 
+    async def run_goals_nudge(self, today_str: str):
+        """At 9:30 PM, check if all founders declared commitments and nudge missing ones."""
+        channel = self.bot.get_channel(PRIMARY_GOALS_CHANNEL_ID)
+        if not channel:
+            return
+
+        now = datetime.now(TIMEZONE)
+        target_date = (now if now.hour < 5 else now + timedelta(days=1)).strftime("%Y-%m-%d")
+
+        missing = []
+        for key, info in FOUNDERS.items():
+            record = await get_goals_for_date(key, target_date)
+            if not record:
+                missing.append(f"**{info['display_name']} ({info['role']})**")
+
+        if missing:
+            embed = discord.Embed(
+                title="⚠️ 9:30 PM Commitment Nudge • Declare Deliverables",
+                description=(
+                    f"Awaiting tomorrow's commitments from: {', '.join(missing)}\n\n"
+                    "Declare your 2-4 core commitments before logging off. "
+                    "Unscripted days lead to reactive entropy."
+                ),
+                color=COLOR_WARNING
+            )
+            embed.set_footer(text="Krishna Engineering OS • 60-Second Check-In")
+            await channel.send(embed=embed)
+
     async def run_daily_scoring(self, today_str: str):
         """Calculate and publish 8:00 PM daily scores, praise, and feedback."""
         channel = self.bot.get_channel(PRIMARY_GOALS_CHANNEL_ID)
@@ -251,23 +287,29 @@ class SchedulerCog(commands.Cog):
             f"{prev_date.strftime('%Y-%m-%d')}",
         ]
 
+        hist_context = await get_recent_founder_context(days=3)
+
         for key, info in FOUNDERS.items():
             goals_record = await get_goals_for_date(key, today_str)
             locked_goals = goals_record["parsed_goals"] if goals_record else []
 
             raw_updates = await get_updates_for_date_range(key, start_time, end_time)
-            # Filter out any updates that explicitly belong to a previous day
+            # Filter out any updates that explicitly belong to a previous day or are bot lock embeds
             updates = [
                 u for u in raw_updates 
                 if not any(p in u["content"].lower() for p in prev_patterns)
+                and "commitments locked" not in u["content"].lower()
+                and "[embed: 🔒" not in u["content"].lower()
             ]
             updates_text = "\n".join([f"[{u['timestamp']}] {u['content']}" for u in updates])
 
             msg_ids = [u["message_id"] for u in updates]
             reactions = await get_reactions_for_messages(msg_ids)
 
-            # Gemini Evaluation
-            ai_eval = await evaluate_daily_execution_with_ai(key, locked_goals, updates_text)
+            # Gemini Evaluation with Historical Context Memory
+            ai_eval = await evaluate_daily_execution_with_ai(
+                key, locked_goals, updates_text, historical_context=hist_context
+            )
 
             # Krishna OS Mathematical Engine
             author_id = info.get("discord_id", 0)
@@ -316,6 +358,9 @@ class SchedulerCog(commands.Cog):
             peer_mult = score_data.get("peer_multiplier", 1.0)
             formula_str = f"📐 *Formula: ({raw_sum:.1f} tasks × {peer_mult}x peer) + {bonus_pts:.1f} bonus = {final_score:.1f} pts*"
 
+            m_q = ai_eval.get("mentor_question", "")
+            m_q_section = f"\n\n❓ **Mentor Query for Tomorrow:** *\"{m_q}\"*" if m_q else ""
+
             val = (
                 f"📊 **Points Breakdown:**\n"
                 f"{tasks_str}\n"
@@ -324,6 +369,7 @@ class SchedulerCog(commands.Cog):
                 f"{formula_str}\n\n"
                 f"🏆 **Win:** {ai_eval.get('praise_text', 'Consistent execution.')}\n\n"
                 f"💡 **Thiel Critique:** {ai_eval.get('feedback_text', 'Keep momentum.')}"
+                f"{m_q_section}"
             )
             if len(val) > 1024:
                 val = val[:1020] + "..."
