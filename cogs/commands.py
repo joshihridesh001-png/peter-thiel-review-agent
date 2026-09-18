@@ -80,10 +80,21 @@ class CommandsCog(commands.Cog):
             return
 
         tasks_list = record.get("parsed_goals", [])
-        desc = "\n".join([
-            f"• **{t.get('task')}** (Size: {t.get('complexity')}/5)\n  💬 *Why this score: {t.get('score_reason', t.get('dharma_reason', 'Important task for your role'))}*"
-            for t in tasks_list
-        ])
+        task_blocks = []
+        for i, t in enumerate(tasks_list, start=1):
+            task_title = t.get("task", "Commitment")
+            size = t.get("complexity", 3)
+            reason = t.get("score_reason", t.get("dharma_reason", "Important task for your role"))
+            block = f"**{i}. {task_title}**\n↳ **Size:** `{size}/5`\n💬 *Why: {reason}*"
+            task_blocks.append(block)
+
+        tasks_text = "\n\n".join(task_blocks)
+        desc = (
+            f"Goals for: **{target_date}** • **{len(tasks_list)} Commitments**\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"{tasks_text}\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        )
 
         embed = discord.Embed(
             title=f"🎯 Planned Goals: {display_name} • {target_date}",

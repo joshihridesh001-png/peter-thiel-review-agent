@@ -123,13 +123,25 @@ class TrackerCog(commands.Cog):
             except Exception:
                 pass
 
-            task_summary = "\n".join([
-                f"• **{t.get('task')}** (Size: {t.get('complexity')}/5)\n  💬 *Why this score: {t.get('score_reason', t.get('dharma_reason', 'Important task for your role'))}*"
-                for t in parsed_tasks
-            ])
+            task_blocks = []
+            for i, t in enumerate(parsed_tasks, start=1):
+                task_title = t.get("task", "Commitment")
+                size = t.get("complexity", 3)
+                reason = t.get("score_reason", t.get("dharma_reason", "Important task for your role"))
+                block = f"**{i}. {task_title}**\n↳ **Size:** `{size}/5`\n💬 *Why: {reason}*"
+                task_blocks.append(block)
+
+            tasks_text = "\n\n".join(task_blocks)
+            desc = (
+                f"Goals for: **{target_date}** • **{len(parsed_tasks)} Commitments Locked**\n\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"{tasks_text}\n\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            )
+
             embed = discord.Embed(
                 title=f"🔒 Plan Saved • {FOUNDERS[founder_key]['display_name']} ({FOUNDERS[founder_key]['role']})",
-                description=f"Goals for: **{target_date}**\n\n{task_summary}",
+                description=desc,
                 color=COLOR_SUCCESS
             )
             embed.set_footer(text="Peter Thiel Review Bot • Scored tomorrow at 8:00 PM")
