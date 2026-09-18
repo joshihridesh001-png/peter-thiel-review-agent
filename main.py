@@ -6,8 +6,22 @@ Main entrypoint initializing intents, database, and Discord cogs.
 import asyncio
 import logging
 import sys
+import os
 import discord
 from discord.ext import commands
+
+# Ensure Windows stdout/stderr handles UTF-8 (for emoji logs)
+if sys.platform == "win32":
+    if hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(encoding="utf-8")
+        except Exception:
+            pass
+    if hasattr(sys.stderr, "reconfigure"):
+        try:
+            sys.stderr.reconfigure(encoding="utf-8")
+        except Exception:
+            pass
 
 from config import DISCORD_BOT_TOKEN
 from database.db import init_db
