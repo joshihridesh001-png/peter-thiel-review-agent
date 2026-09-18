@@ -63,6 +63,7 @@ CHANNELS = {
 # The channel where daily 9 PM goals and 8 PM digests are posted by default
 PRIMARY_GOALS_CHANNEL_ID = CHANNELS["daily-reports"]
 LEADERSHIP_CHANNEL_ID = CHANNELS["leadership"]
+SCORES_CHANNEL_ID = CHANNELS["scores"]
 
 # Channels monitored for daytime work updates
 MONITORED_UPDATE_CHANNELS = set(CHANNELS.values())

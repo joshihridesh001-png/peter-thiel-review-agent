@@ -17,6 +17,7 @@ import zoneinfo
 from config import (
     PRIMARY_GOALS_CHANNEL_ID,
     LEADERSHIP_CHANNEL_ID,
+    SCORES_CHANNEL_ID,
     MONITORED_UPDATE_CHANNELS,
     SYSTEM_EMBED_TITLES,
     PEER_EMOJIS,
@@ -261,9 +262,15 @@ class SchedulerCog(commands.Cog):
             embed.set_footer(text="Calcrum Review Bot • 60-Second Check-In")
             await channel.send(embed=embed)
 
-    async def run_daily_scoring(self, today_str: str):
+    async def run_daily_scoring(self, today_str: str, target_channel_id: Optional[int] = None):
         """Calculate and publish 8:00 PM daily scores, praise, and feedback."""
-        channel = self.bot.get_channel(PRIMARY_GOALS_CHANNEL_ID)
+        dest_id = target_channel_id or SCORES_CHANNEL_ID or PRIMARY_GOALS_CHANNEL_ID
+        channel = self.bot.get_channel(dest_id)
+        if not channel:
+            try:
+                channel = await self.bot.fetch_channel(dest_id)
+            except Exception:
+                channel = self.bot.get_channel(PRIMARY_GOALS_CHANNEL_ID)
         if not channel:
             return
 
@@ -279,7 +286,7 @@ class SchedulerCog(commands.Cog):
         start_time = f"{today_str}T05:00:00"
         end_time = f"{today_str}T23:59:59"
 
-        summary_fields = []
+        founder_cards = []
         leaderboard_ranks = []
 
         prev_date = target_date - timedelta(days=1)
@@ -339,52 +346,42 @@ class SchedulerCog(commands.Cog):
                 feedback_text=ai_eval.get("feedback_text", ""),
             )
 
-            task_lines = []
+            task_blocks = []
             for t in score_data.get("task_breakdown", []):
                 task_desc = t.get("task", "Task")
-                if len(task_desc) > 38:
-                    task_desc = task_desc[:35] + "..."
                 comp_pct = int(t.get("completion", 0.0) * 100)
                 w = int(t.get("complexity", 3))
                 pts = t.get("task_points", 0.0)
-                reason = t.get("score_reason", "").strip()
-                entry = f"• **{task_desc}** (Size: {w}/5, {comp_pct}% done) → **+{pts:.1f} pts**"
-                if reason:
-                    if len(reason) > 75:
-                        reason = reason[:72] + "..."
-                    entry += f"\n  💬 *Why: {reason}*"
-                task_lines.append(entry)
+                reason = t.get("score_reason", "Score based on verified activity.").strip()
 
-            tasks_str = "\n".join(task_lines) if task_lines else "• *No tasks finished today*"
+                block = f"• **{task_desc}**\n  ↳ Size: `{w}/5` | Done: `{comp_pct}%` → **+{pts:.1f} pts**\n  💬 *Why: {reason}*"
+                task_blocks.append(block)
+
+            tasks_text = "\n\n".join(task_blocks) if task_blocks else "*No tasks finished today.*"
             bonus_pts = score_data.get("bonus_points", 0.0)
-            bonus_reason = ai_eval.get("spontaneous_reason", "")
-            bonus_suffix = f" *({bonus_reason[:35]})*" if bonus_reason else ""
-            bonus_str = f"• **Bonus Points:** +{bonus_pts:.1f} pts{bonus_suffix}"
-
             raw_sum = score_data.get("raw_task_sum", 0.0)
             peer_mult = score_data.get("peer_multiplier", 1.0)
-            formula_str = f"📐 *How it's counted: ({raw_sum:.1f} task pts × {peer_mult}x team boost) + {bonus_pts:.1f} bonus = {final_score:.1f} pts*"
+            bonus_reason = ai_eval.get("spontaneous_reason", "")
+            bonus_suffix = f" *({bonus_reason[:35]})*" if bonus_reason else ""
 
             m_q = ai_eval.get("mentor_question", "")
-            m_q_section = f"\n\n❓ **Question for Tomorrow:** *\"{m_q}\"*" if m_q else ""
+            m_q_section = f"\n\n❓ **Question for Tomorrow:**\n*\"{m_q}\"*" if m_q else ""
 
-            val = (
-                f"📊 **Score Details:**\n"
-                f"{tasks_str}\n"
-                f"{bonus_str}\n"
-                f"👍 **Team Boost:** {peer_mult}x (✅ {score_data['emoji_counts']['✅']} | 🔥 {score_data['emoji_counts']['🔥']} | ⚠️ {score_data['emoji_counts']['⚠️']})\n"
-                f"{formula_str}\n\n"
-                f"🏆 **What went great:** {ai_eval.get('praise_text', 'Good steady work today.')}\n\n"
-                f"💡 **Advice from Peter:** {ai_eval.get('feedback_text', 'Keep building and moving fast.')}"
+            founder_desc = (
+                f"📋 **Commitments & Tasks:**\n\n"
+                f"{tasks_text}\n\n"
+                f"───────────────────────────────────────\n\n"
+                f"📊 **Score Math:** `({raw_sum:.1f} task pts × {peer_mult}x boost) + {bonus_pts:.1f} bonus = {final_score:.2f} pts`\n\n"
+                f"🏆 **What Went Great:**\n{ai_eval.get('praise_text', 'Good steady work today.')}\n\n"
+                f"💡 **Advice from Peter:**\n{ai_eval.get('feedback_text', 'Keep building and moving fast.')}"
                 f"{m_q_section}"
             )
-            if len(val) > 1024:
-                val = val[:1020] + "..."
 
-            summary_fields.append({
-                "name": f"{info['display_name']} ({info['role']}) — {final_score:.1f} pts",
-                "value": val,
-                "inline": False,
+            founder_cards.append({
+                "founder_key": key,
+                "name": f"{info['display_name']} ({info['role']})",
+                "final_score": final_score,
+                "description": founder_desc,
             })
             await asyncio.sleep(1.0)
 
@@ -392,16 +389,46 @@ class SchedulerCog(commands.Cog):
         leaderboard_ranks.sort(key=lambda x: x[3], reverse=True)
         top_name = leaderboard_ranks[0][1] if leaderboard_ranks else "Team"
 
-        embed = discord.Embed(
+        # Build clean multi-embed payload
+        embed_list = []
+
+        # 1. Header Overview Embed
+        overview_desc = (
+            f"👑 **MVP of the Day:** **{top_name}**\n\n"
+            f"**Today's Standings:**\n" +
+            "\n".join([f"• {'🥇' if i == 0 else '🥈' if i == 1 else '🥉'} **{r[1]} ({r[2]}):** **{r[3]:.2f} pts**" for i, r in enumerate(leaderboard_ranks)]) +
+            "\n\n*Detailed task proof, score explanations, and coaching advice below.*"
+        )
+        embed_overview = discord.Embed(
             title=f"🌆 8:00 PM Daily Scorecard • {today_str}",
-            description=f"MVP of the Day: 👑 **{top_name}**\nHere is how everyone did today!",
+            description=overview_desc,
             color=COLOR_SUCCESS,
         )
-        for field in summary_fields:
-            embed.add_field(name=field["name"], value=field["value"], inline=field["inline"])
+        embed_list.append(embed_overview)
 
-        embed.set_footer(text="Calcrum Review Bot • Scores are saved automatically every night")
-        await channel.send(embed=embed)
+        # 2. Individual Founder Cards
+        role_colors = {
+            "hridesh": 0xF1C40F,  # Gold
+            "swarit": 0x3498DB,   # Blue
+            "rahul": 0xE67E22,    # Orange
+        }
+
+        # Order by rank
+        for rank_info in leaderboard_ranks:
+            f_key = rank_info[0]
+            card = next((c for c in founder_cards if c["founder_key"] == f_key), None)
+            if not card:
+                continue
+            color = role_colors.get(f_key, COLOR_PRIMARY)
+            f_embed = discord.Embed(
+                title=f"{'👑' if rank_info == leaderboard_ranks[0] else '🔹'} {card['name']} — {card['final_score']:.2f} pts",
+                description=card["description"],
+                color=color,
+            )
+            embed_list.append(f_embed)
+
+        embed_list[-1].set_footer(text="Calcrum Review Bot • Scores are saved automatically every night")
+        await channel.send(embeds=embed_list)
 
     async def run_weekly_swot(self):
         """Aggregate 7-day data and post Executive SWOT to #leadership."""
