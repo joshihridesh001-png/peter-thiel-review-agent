@@ -106,12 +106,16 @@ class TrackerCog(commands.Cog):
         # Goals can ONLY be declared by human founders, never by automated bots
         is_human = not message.author.bot
         is_goals_channel = channel_id == PRIMARY_GOALS_CHANNEL_ID
-        is_explicit_goal = content.lower().startswith(("goal", "tomorrow", "!goal", "/goal", "targets"))
+        is_explicit_goal = content.lower().startswith(("goal", "tomorrow", "!goal", "/goal", "targets", "commitment", "commitments", "today"))
+        is_numbered_list = content.strip().startswith(("1.", "1)", "1 -", "- ", "* ", "• "))
         is_nighttime = now.hour >= 20 or now.hour <= 4
 
-        if is_human and ((is_goals_channel and is_nighttime) or is_explicit_goal):
-            # Tomorrow's date target (if late night past midnight, it's today)
-            target_date = (now if now.hour < 5 else now + timedelta(days=1)).strftime("%Y-%m-%d")
+        # In primary goals channel, numbered lists, nighttime messages, or explicit keywords lock commitments
+        is_goal_declaration = is_human and (is_explicit_goal or (is_goals_channel and (is_nighttime or is_numbered_list)))
+
+        if is_goal_declaration:
+            # If posted in evening/night (after 5 PM), it's tomorrow's goals. If daytime (before 5 PM), it's today's goals.
+            target_date = (now + timedelta(days=1) if now.hour >= 17 else now).strftime("%Y-%m-%d")
 
             # Parse with Gemini AI
             parsed_tasks = await parse_daily_goals_with_ai(founder_key, content)
