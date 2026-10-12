@@ -110,8 +110,12 @@ class TrackerCog(commands.Cog):
         is_numbered_list = content.strip().startswith(("1.", "1)", "1 -", "- ", "* ", "• "))
         is_nighttime = now.hour >= 20 or now.hour <= 4
 
-        # In primary goals channel, numbered lists, nighttime messages, or explicit keywords lock commitments
-        is_goal_declaration = is_human and (is_explicit_goal or (is_goals_channel and (is_nighttime or is_numbered_list)))
+        # In primary goals channel, numbered lists, explicit keywords, or multi-line nighttime messages lock commitments
+        is_goal_declaration = is_human and (
+            is_explicit_goal
+            or is_numbered_list
+            or (is_goals_channel and is_nighttime and not content.startswith("<@") and len(content.splitlines()) >= 2)
+        )
 
         if is_goal_declaration:
             # If posted in evening/night (after 5 PM), it's tomorrow's goals. If daytime (before 5 PM), it's today's goals.

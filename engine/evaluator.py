@@ -80,11 +80,10 @@ Output MUST be a valid JSON array of objects with keys:
 
     client = _get_client()
     candidate_models = [
-        'gemini-3.5-flash-lite',
-        'gemini-3.1-flash-lite',
-        'gemini-3.1-flash-lite-preview',
-        'gemini-3.6-flash',
         'gemini-3.5-flash',
+        'gemini-3.5-flash-lite',
+        'gemini-3.6-flash',
+        'gemini-3.1-flash-lite',
         'gemini-flash-latest',
     ]
 
@@ -225,11 +224,10 @@ Return valid JSON with schema:
 
     client = _get_client()
     candidate_models = [
-        'gemini-3.5-flash-lite',
-        'gemini-3.1-flash-lite',
-        'gemini-3.1-flash-lite-preview',
-        'gemini-3.6-flash',
         'gemini-3.5-flash',
+        'gemini-3.5-flash-lite',
+        'gemini-3.6-flash',
+        'gemini-3.1-flash-lite',
         'gemini-flash-latest',
     ]
 
@@ -238,7 +236,8 @@ Return valid JSON with schema:
         for model_name in candidate_models:
             for attempt in range(2):
                 try:
-                    response = client.models.generate_content(
+                    response = await asyncio.to_thread(
+                        client.models.generate_content,
                         model=model_name,
                         contents=system_prompt,
                         config=types.GenerateContentConfig(
