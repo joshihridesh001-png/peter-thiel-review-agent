@@ -5,6 +5,7 @@ Uses Google Gemini 2.5 Flash with structured JSON output and robust fallback log
 
 import os
 import json
+import asyncio
 import logging
 from typing import List, Dict, Any, Optional
 from config import GEMINI_API_KEY, FOUNDERS, ROLE_DHARMA_RANGE, COMPLEXITY_RANGE
@@ -90,7 +91,8 @@ Output MUST be a valid JSON array of objects with keys:
     if client:
         for model_name in candidate_models:
             try:
-                response = client.models.generate_content(
+                response = await asyncio.to_thread(
+                    client.models.generate_content,
                     model=model_name,
                     contents=f"{system_prompt}\n\nRaw Goals Submitted:\n{raw_goals_text}",
                     config=types.GenerateContentConfig(
@@ -232,7 +234,6 @@ Return valid JSON with schema:
     ]
 
     if client:
-        import asyncio
         for model_name in candidate_models:
             for attempt in range(2):
                 try:

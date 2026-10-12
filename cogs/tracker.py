@@ -113,8 +113,10 @@ class TrackerCog(commands.Cog):
         # In primary goals channel, numbered lists, explicit keywords, or multi-line nighttime messages lock commitments
         is_goal_declaration = is_human and (
             is_explicit_goal
-            or is_numbered_list
-            or (is_goals_channel and is_nighttime and not content.startswith("<@") and len(content.splitlines()) >= 2)
+            or (is_goals_channel and (
+                is_numbered_list
+                or (is_nighttime and not content.startswith("<@") and len(content.splitlines()) >= 2)
+            ))
         )
 
         if is_goal_declaration:
