@@ -21,6 +21,7 @@ This bot solves founder operational friction:
 
 | Time | Channel | Action |
 | :--- | :--- | :--- |
+| **7:15 PM Daily** | `#daily-reports` | **Context Gap Inquiry**: Peter Thiel scans attachments, PRs, and updates, flagging ambiguous items or context holes with 1 punchy question per founder so they can clarify before scoring. |
 | **8:00 PM Daily** | `#daily-reports` | Bot evaluates daytime updates against locked goals, computes $S_{\text{daily}}$, generates the **Win of the Day**, and posts the scorecard. |
 | **9:00 PM Daily** | `#daily-reports` | Bot pings all 3 founders to declare 2-4 commitments for tomorrow before sleep. Gemini parses freeform text into structured JSON. |
 | **Sunday 9:00 PM** | `#leadership` | Synthesizes 7-day scoring distributions into a depersonalized **Executive SWOT Report** (Strengths, Weaknesses, Opportunities, Threats). |
@@ -78,24 +79,51 @@ $$S_{\text{daily}} = \left( \sum_{i=1}^n C_i \times W_i \times A_{\text{dharma}}
 ## 🧪 Running the Verification Test Suite
 
 ```bash
-python -m unittest tests/test_engine.py
+python -m pytest tests/ -v
 ```
 Verifies:
-1. Peer multiplier clamping $[0.8, 1.2]$ and self-reaction filtering.
-2. Daily scoring formula and anti-task-stuffing discounts.
-3. Conservation of equity across all 24 months ($\sum E \equiv 100.0\%$).
-4. Safety floor diversion to Company Treasury.
-5. Async SQLite database persistence and schema migrations.
-6. Fallback heuristic parsers for offline/resilient execution.
+1. **Multimodal Attachment Reading**: Downloads and parses `.md`, `.txt`, `.csv` attachments up to 250KB (`engine/attachment_reader.py`).
+2. **Gemini Vision Screenshot Analysis**: Analyzes terminal errors, dashboards, and PR screenshots (`engine/attachment_reader.py`).
+3. **Link Enrichment**: Fetches titles/diff stats for GitHub PRs, commits, and Discord jump links (`engine/attachment_reader.py`).
+4. **7:15 PM Inquiry Engine**: Proactively detects context gaps and formulates 1 targeted question before scoring (`engine/inquiry.py`).
+5. **Anti-Gaming Cross-Verification**: Enforces that verbal claims are capped at 0.3–0.5 without tangible proof, while rewarding modesty backed by heavy artifacts (`engine/evaluator.py`).
+6. **Core Scoring & Equity Math**: Peer multiplier clamping $[0.8, 1.2]$, conservation of equity, and 60% safety floor (`engine/scoring.py`, `engine/equity.py`).
 
 ---
 
-## 🚀 Running the Bot 24/7
+## 🚀 VPS Deployment Runbook (Ubuntu/Debian / GCP / AWS)
 
+To deploy Peter Thiel 24/7 on your VPS:
+
+### 1. One-Line Automated Deployment
+On your VPS terminal, run:
 ```bash
-# 1. Install dependencies
-pip install discord.py google-genai python-dotenv aiosqlite
+git clone https://github.com/joshihridesh001-png/peter-thiel-review-agent.git
+cd peter-thiel-review-agent
+chmod +x deploy_gcp.sh
+./deploy_gcp.sh
+```
 
-# 2. Launch the 24/7 bot daemon
-python main.py
+### 2. Configure Environment Secrets
+Edit your `.env` file on the VPS:
+```bash
+nano .env
+```
+Ensure your tokens are configured:
+```env
+DISCORD_BOT_TOKEN="your_discord_bot_token"
+GEMINI_API_KEY="your_gemini_api_key"
+```
+
+### 3. Managing the 24/7 Systemd Service
+The automated script registers Peter Thiel as a background `systemd` daemon:
+```bash
+# Check status
+sudo systemctl status peter-thiel.service
+
+# View live real-time logs
+sudo journalctl -u peter-thiel.service -f
+
+# Restart service after updates
+sudo systemctl restart peter-thiel.service
 ```
