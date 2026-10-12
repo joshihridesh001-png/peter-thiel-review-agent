@@ -63,6 +63,7 @@ logger = logging.getLogger(__name__)
 class SchedulerCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        self.last_inquiry_date = ""
         self.last_scored_date = ""
         self.last_prompted_goals_date = ""
         self.last_goals_nudge_date = ""
@@ -79,6 +80,12 @@ class SchedulerCog(commands.Cog):
         now = datetime.now(TIMEZONE)
         today_str = now.strftime("%Y-%m-%d")
         month_str = now.strftime("%Y-%m")
+
+        # 0. 7:15 PM Pre-Scoring Context Check
+        if (now.hour == 19 and now.minute >= 15 and now.hour < 20) and self.last_inquiry_date != today_str:
+            self.last_inquiry_date = today_str
+            logger.info(f"Triggering 7:15 PM Pre-Scoring Context Inquiry for {today_str}")
+            await self.run_context_inquiry_callout(today_str)
 
         # 1. 8:00 PM Daily Scoring Calculation (with catch-up between 8 PM and 11 PM)
         if (now.hour >= DAILY_SCORING_HOUR and now.hour < 23) and self.last_scored_date != today_str:
@@ -214,6 +221,41 @@ class SchedulerCog(commands.Cog):
                                     )
             except Exception as e:
                 logger.warning(f"Could not fetch history from channel {ch_id}: {e}")
+
+    async def run_context_inquiry_callout(self, today_str: str):
+        """At 7:15 PM, ask founders quick clarification questions about ambiguous tasks or attachments before 8:00 PM scoring."""
+        from engine.inquiry import generate_pre_scoring_inquiries
+        inquiries = await generate_pre_scoring_inquiries(today_str)
+        if not inquiries:
+            logger.info(f"No context inquiries needed for {today_str}")
+            return
+
+        channel = self.bot.get_channel(PRIMARY_GOALS_CHANNEL_ID)
+        if not channel:
+            logger.error("Could not find primary goals channel for 7:15 PM context check.")
+            return
+
+        embed = discord.Embed(
+            title="🔍 7:15 PM Quick Context Check • Before Tonight's Scores",
+            description=(
+                "Hey founders! I'm reviewing today's work before crunching tonight's 8:00 PM scorecards.\n"
+                "I noticed a couple of things that could use a quick clarification so you get full credit:"
+            ),
+            color=COLOR_PRIMARY
+        )
+
+        for key, question in inquiries.items():
+            founder_info = FOUNDERS.get(key, {})
+            name = founder_info.get("display_name", key.capitalize())
+            role = founder_info.get("role", "Founder")
+            embed.add_field(
+                name=f"❓ {name} ({role})",
+                value=f"*{question}*",
+                inline=False
+            )
+
+        embed.set_footer(text="Reply directly in this channel before 8:00 PM so Peter can count it! • Peter Thiel Review Bot")
+        await channel.send(embed=embed)
 
     async def run_daily_goals_callout(self):
         """Prompt all 3 founders in #daily-reports to lock in tomorrow's commitments."""

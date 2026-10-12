@@ -182,6 +182,11 @@ How to judge what really happened (DO NOT GET FOOLED BY FANCY TALK):
    - If someone explains a feature another founder built, give them credit for helping the team understand it (1-2 pts), not for inventing it.
 4. Ask for proof:
    - If someone claims they did something huge without a link, commit, or screenshot, ask for proof in simple words.
+5. Anti-gaming and cross-verification rules (Claims vs Tangible Proof):
+   - Founders and teammates will naturally overplay or underplay what they did. Do NOT take verbal claims as ground truth.
+   - If someone claims something in a clarification reply or chat without matching files, PRs, or logs, CAP completion at 0.3 to 0.5. Explain why in score_reason (e.g. "Capped credit: claim exceeds tangible proof on disk").
+   - If a founder is modest or quiet ("fixed a bug", "did some work"), but attached files, test logs, or PR diffs prove massive output, UPGRADE their completion score to 1.0 and praise their modesty in praise_text.
+   - Read all [File Attachment: ...] blocks, [Screenshot Analysis: ...] blocks, [GitHub PR ...] blocks, and [GitHub Commit ...] blocks as primary ground truth. Tangible proof always beats chat claims!
 
 Founder: {founder.get('display_name', founder_key)} ({role})
 Their main job: {', '.join(founder.get('dharma_focus', []))}
@@ -226,6 +231,7 @@ Return valid JSON with schema:
 
     client = _get_client()
     candidate_models = [
+        'gemini-3.8-flash',
         'gemini-3.5-flash',
         'gemini-3.5-flash-lite',
         'gemini-3.6-flash',
