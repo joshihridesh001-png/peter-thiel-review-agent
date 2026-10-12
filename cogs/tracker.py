@@ -27,6 +27,7 @@ from database.models import (
     get_all_users,
 )
 from engine.evaluator import parse_daily_goals_with_ai
+from engine.attachment_reader import enrich_discord_message
 from skills_bridge.discord_bridge import build_embed, COLOR_SUCCESS, COLOR_PRIMARY
 
 logger = logging.getLogger(__name__)
@@ -89,12 +90,7 @@ class TrackerCog(commands.Cog):
 
         now = datetime.now(TIMEZONE)
         channel_id = message.channel.id
-        content = message.content.strip()
-
-        # Append any embed content (e.g. assistant rich reports)
-        for e in message.embeds:
-            if e.description:
-                content += f"\n[Embed: {e.title or ''}] {e.description}"
+        content = await enrich_discord_message(message, self.bot)
 
         if not content.strip():
             return

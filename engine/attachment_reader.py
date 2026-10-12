@@ -161,3 +161,33 @@ async def enrich_message_links(content: str, bot_client=None) -> str:
     if extra_snippets:
         return content + "\n" + "\n".join(extra_snippets)
     return content
+
+from pathlib import Path
+
+async def enrich_discord_message(message, bot_client=None) -> str:
+    """Master helper to merge message text, attachment contents, and links."""
+    content = (getattr(message, "content", "") or "").strip()
+
+    # Append embed descriptions
+    for e in getattr(message, "embeds", []):
+        desc = getattr(e, "description", None)
+        if desc:
+            title = getattr(e, "title", "") or ""
+            content += f"\n[Embed: {title}] {desc}"
+
+    # Extract attachments
+    for att in getattr(message, "attachments", []):
+        filename = getattr(att, "filename", "")
+        url = getattr(att, "url", "")
+        ext = Path(filename).suffix.lower()
+        if ext in TEXT_EXTENSIONS:
+            snippet = await extract_text_attachment(url, filename)
+            content += f"\n{snippet}"
+        elif ext in IMAGE_EXTENSIONS:
+            snippet = await extract_image_summary(url, filename)
+            content += f"\n{snippet}"
+
+    # Enrich links
+    client = bot_client or getattr(message, "_state", None)
+    content = await enrich_message_links(content, client)
+    return content.strip()
