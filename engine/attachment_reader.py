@@ -43,3 +43,60 @@ async def extract_text_attachment(url: str, filename: str, max_bytes: int = 2560
     except Exception as e:
         logger.warning(f"Failed to read attachment {filename}: {e}")
         return f"[File Attachment: {filename} (Error: {str(e)[:60]})]"
+
+from engine.evaluator import _get_client
+
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
+
+async def extract_image_summary(url: str, filename: str) -> str:
+    """Download screenshot and generate concise technical description using Gemini Vision."""
+    client = _get_client()
+    if not client:
+        return f"[Image Attachment: {filename} (Gemini API key not configured for vision)]"
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=10.0)) as resp:
+                if resp.status != 200:
+                    return f"[Image Attachment: {filename} (HTTP {resp.status} download error)]"
+                image_bytes = await resp.read()
+
+        prompt = (
+            "Analyze this technical startup screenshot. In 1 to 2 simple plain English sentences "
+            "that a 10-year-old can understand, explain what technical work, code, terminal error, "
+            "dashboard metric, or conversation is displayed."
+        )
+
+        candidate_models = [
+            'gemini-3.8-flash',
+            'gemini-3.5-flash',
+            'gemini-3.5-flash-lite',
+            'gemini-flash-latest',
+        ]
+
+        def _call_gemini():
+            from google.genai import types
+            for model_name in candidate_models:
+                try:
+                    return client.models.generate_content(
+                        model=model_name,
+                        contents=[
+                            types.Part.from_bytes(data=image_bytes, mime_type="image/png"),
+                            prompt
+                        ]
+                    )
+                except Exception as e:
+                    logger.warning(f"Vision model {model_name} failed: {e}")
+            return None
+
+        response = await asyncio.to_thread(_call_gemini)
+        if response and response.text:
+            summary = response.text.strip().replace("\n", " ")
+            return f"\n[Screenshot Analysis: {filename}]\nVisual Summary: {summary}"
+        return f"[Image Attachment: {filename} (Vision analysis skipped)]"
+
+    except asyncio.TimeoutError:
+        return f"[Image Attachment: {filename} (Download timed out)]"
+    except Exception as e:
+        logger.warning(f"Failed vision analysis on {filename}: {e}")
+        return f"[Image Attachment: {filename} (Vision analysis skipped)]"
