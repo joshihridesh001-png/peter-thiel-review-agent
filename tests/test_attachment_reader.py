@@ -86,3 +86,67 @@ async def test_extract_image_summary_http_error():
         with patch("engine.attachment_reader._get_client", return_value=MagicMock()):
             res = await extract_image_summary("https://cdn.discordapp.com/notfound.png", "notfound.png")
             assert "HTTP 404 download error" in res
+
+from engine.attachment_reader import enrich_message_links
+
+@pytest.mark.asyncio
+async def test_enrich_github_link():
+    mock_gh_data = {
+        "title": "fix: resolve subagent merge collisions in backend",
+        "state": "open",
+        "changed_files": 14,
+        "user": {"login": "swarit"}
+    }
+    mock_resp = AsyncMock()
+    mock_resp.status = 200
+    mock_resp.json = AsyncMock(return_value=mock_gh_data)
+
+    mock_session = MagicMock()
+    mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_session.__aexit__ = AsyncMock(return_value=None)
+    mock_session.get.return_value.__aenter__ = AsyncMock(return_value=mock_resp)
+    mock_session.get.return_value.__aexit__ = AsyncMock(return_value=None)
+
+    with patch("aiohttp.ClientSession", return_value=mock_session):
+        text = "I opened https://github.com/calcrum/calcrum/pull/22 for review"
+        res = await enrich_message_links(text)
+        assert "[GitHub PR #22: fix: resolve subagent merge collisions in backend (open, 14 files changed)]" in res
+
+@pytest.mark.asyncio
+async def test_enrich_github_commit_link():
+    mock_commit_data = {
+        "commit": {
+            "message": "feat: add user authentication flow\nDetailed explanation here"
+        }
+    }
+    mock_resp = AsyncMock()
+    mock_resp.status = 200
+    mock_resp.json = AsyncMock(return_value=mock_commit_data)
+
+    mock_session = MagicMock()
+    mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_session.__aexit__ = AsyncMock(return_value=None)
+    mock_session.get.return_value.__aenter__ = AsyncMock(return_value=mock_resp)
+    mock_session.get.return_value.__aexit__ = AsyncMock(return_value=None)
+
+    with patch("aiohttp.ClientSession", return_value=mock_session):
+        text = "Pushed fix in https://github.com/calcrum/calcrum/commit/a1b2c3d4e5f6g7h8"
+        res = await enrich_message_links(text)
+        assert "[GitHub Commit a1b2c3d: feat: add user authentication flow]" in res
+
+@pytest.mark.asyncio
+async def test_enrich_discord_jump_link():
+    mock_msg = MagicMock()
+    mock_msg.clean_content = "Here is the user feedback: They loved the dashboard design!"
+
+    mock_channel = MagicMock()
+    mock_channel.name = "general"
+    mock_channel.fetch_message = AsyncMock(return_value=mock_msg)
+
+    mock_bot = MagicMock()
+    mock_bot.get_channel.return_value = mock_channel
+
+    text = "Refer to https://discord.com/channels/123/456/789"
+    res = await enrich_message_links(text, bot_client=mock_bot)
+    assert "[Discord Reference from #general:" in res
+    assert "They loved the dashboard design!" in res

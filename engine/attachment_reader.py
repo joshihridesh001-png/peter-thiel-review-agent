@@ -100,3 +100,64 @@ async def extract_image_summary(url: str, filename: str) -> str:
     except Exception as e:
         logger.warning(f"Failed vision analysis on {filename}: {e}")
         return f"[Image Attachment: {filename} (Vision analysis skipped)]"
+
+import re
+
+GH_PR_PATTERN = re.compile(r'https?://github\.com/([^/\s]+)/([^/\s]+)/pull/(\d+)')
+GH_COMMIT_PATTERN = re.compile(r'https?://github\.com/([^/\s]+)/([^/\s]+)/commit/([a-f0-9]{7,40})')
+DISCORD_MSG_PATTERN = re.compile(r'https?://(?:ptb\.|canary\.)?discord\.com/channels/(\d+)/(\d+)/(\d+)')
+
+async def enrich_message_links(content: str, bot_client=None) -> str:
+    """Enrich URLs like GitHub PRs, commits, or Discord message references with title/summary."""
+    extra_snippets = []
+
+    # 1. GitHub PRs
+    for owner, repo, pr_num in GH_PR_PATTERN.findall(content):
+        api_url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_num}"
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(api_url, timeout=aiohttp.ClientTimeout(total=5.0)) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        title = data.get("title", "")
+                        state = data.get("state", "open")
+                        files = data.get("changed_files", 0)
+                        extra_snippets.append(
+                            f"[GitHub PR #{pr_num}: {title} ({state}, {files} files changed)]"
+                        )
+        except Exception as e:
+            logger.debug(f"GitHub PR fetch skipped: {e}")
+
+    # 2. GitHub Commits
+    for owner, repo, sha in GH_COMMIT_PATTERN.findall(content):
+        api_url = f"https://api.github.com/repos/{owner}/{repo}/commits/{sha}"
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(api_url, timeout=aiohttp.ClientTimeout(total=5.0)) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        msg = data.get("commit", {}).get("message", "").split("\n")[0]
+                        extra_snippets.append(
+                            f"[GitHub Commit {sha[:7]}: {msg}]"
+                        )
+        except Exception as e:
+            logger.debug(f"GitHub commit fetch skipped: {e}")
+
+    # 3. Discord Jump Links
+    if bot_client:
+        for gid, cid, mid in DISCORD_MSG_PATTERN.findall(content):
+            try:
+                channel = bot_client.get_channel(int(cid))
+                if channel:
+                    msg = await channel.fetch_message(int(mid))
+                    if msg:
+                        clean_text = msg.clean_content.strip().replace("\n", " ")[:150]
+                        extra_snippets.append(
+                            f"[Discord Reference from #{channel.name}: \"{clean_text}\"]"
+                        )
+            except Exception as e:
+                logger.debug(f"Discord jump link fetch skipped: {e}")
+
+    if extra_snippets:
+        return content + "\n" + "\n".join(extra_snippets)
+    return content
