@@ -24,11 +24,8 @@ DATA_DIR = Path(os.getenv("DATA_DIR", str(BASE_DIR)))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH = DATA_DIR / "founder_ops.db"
 
-# Discord Bot Token (falls back to existing skill default token if not in env)
-DISCORD_BOT_TOKEN = os.getenv(
-    "DISCORD_BOT_TOKEN",
-    "MTUxMTc0MzAyMjIyMjU0MDgxMA.G8Qho0.j9FvQOCS3cv1dJdFevi8lnzlrvemNVpWPEnrLY",
-).strip()
+# Discord Bot Token
+DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN", "").strip()
 
 # Gemini API Key
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
