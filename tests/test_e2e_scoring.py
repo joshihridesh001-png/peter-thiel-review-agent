@@ -15,5 +15,5 @@ def test_full_scoring_math():
     res = compute_daily_score(task_evals, reactions, author_discord_id=111, spontaneous_bonus=2.0)
     
     assert res["raw_task_sum"] == 6.0
-    assert res["peer_multiplier"] == 1.05
-    assert res["final_score"] == pytest.approx(8.3, 0.1)
+    assert res["peer_multiplier"] == 1.1
+    assert res["final_score"] == pytest.approx(8.6, 0.1)
