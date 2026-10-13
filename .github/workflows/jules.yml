@@ -1,0 +1,32 @@
+name: Jules AI Agent
+
+on:
+  workflow_dispatch:
+    inputs:
+      prompt:
+        description: 'Task for Jules to execute'
+        required: true
+        default: 'Run pytest test suite and fix any identified edge cases or warnings.'
+
+jobs:
+  run-jules:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run test suite
+        run: |
+          python -m pytest tests/ -v
