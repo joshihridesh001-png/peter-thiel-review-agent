@@ -19,7 +19,21 @@ TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 if len(sys.argv) > 1 and sys.argv[1].strip():
     TOKEN = sys.argv[1].strip()
 
-CHANNEL_ID = "1510083831405875391"  # dev-general
+# Channel mapping
+CHANNEL_MAP = {
+    "dev-updates": "1508293104371896330",
+    "dev-general": "1510083831405875391",
+}
+CHANNEL_ID = CHANNEL_MAP["dev-updates"]
+
+for arg in sys.argv[1:]:
+    if arg in CHANNEL_MAP:
+        CHANNEL_ID = CHANNEL_MAP[arg]
+    elif arg.isdigit():
+        CHANNEL_ID = arg
+    elif not TOKEN and len(arg) > 40:
+        TOKEN = arg
+
 
 if not TOKEN:
     print("ERROR: DISCORD_BOT_TOKEN is not set.")
