@@ -16,8 +16,6 @@ env_path = Path(__file__).resolve().parent.parent / ".env"
 load_dotenv(dotenv_path=env_path)
 
 TOKEN = os.getenv("DISCORD_BOT_TOKEN")
-if len(sys.argv) > 1 and sys.argv[1].strip():
-    TOKEN = sys.argv[1].strip()
 
 # Channel mapping
 CHANNEL_MAP = {
@@ -27,12 +25,14 @@ CHANNEL_MAP = {
 CHANNEL_ID = CHANNEL_MAP["dev-updates"]
 
 for arg in sys.argv[1:]:
-    if arg in CHANNEL_MAP:
-        CHANNEL_ID = CHANNEL_MAP[arg]
-    elif arg.isdigit():
-        CHANNEL_ID = arg
-    elif not TOKEN and len(arg) > 40:
-        TOKEN = arg
+    clean_arg = arg.strip()
+    if clean_arg in CHANNEL_MAP:
+        CHANNEL_ID = CHANNEL_MAP[clean_arg]
+    elif clean_arg.isdigit():
+        CHANNEL_ID = clean_arg
+    elif len(clean_arg) > 40:
+        TOKEN = clean_arg
+
 
 
 if not TOKEN:
