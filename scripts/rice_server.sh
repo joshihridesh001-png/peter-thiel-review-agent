@@ -232,11 +232,11 @@ echo -e "  ${YELLOW}[4/4]${RESET} Sending ACPI power signal to hardware... ${CYA
 
 sleep 1.2
 
-# Execute the underlying system call if invoked directly
+# Execute the underlying system call cleanly
 if [[ "$ACTION" == "reboot" ]]; then
-    /sbin/reboot "$@"
+    /sbin/reboot
 else
-    /sbin/poweroff "$@"
+    /sbin/poweroff
 fi
 EOF
 chmod +x /root/.banner/shutdown_screen.sh
