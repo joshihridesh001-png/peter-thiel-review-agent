@@ -105,17 +105,17 @@ clear
 
 echo -e "${MAGENTA}"
 cat << 'ART'
-   _____          _        _____  _    _ __  __ 
-  / ____|   /\   | |      / ____|| |  | |  \/  |
- | |       /  \  | |     | |     | |  | | \  / |
- | |      / /\ \ | |     | |     | |  | | |\/| |
- | |____ / ____ \| |____ | |____ | |__| | |  | |
-  \_____/_/    \_\______| \_____| \____/|_|  |_|
+  _____    /\    _       _____   _____   _    _  __  __ 
+ / ____|  /  \  | |     / ____| |  __ \ | |  | ||  \/  |
+| |      / /\ \ | |     | |     | |__) || |  | || \  / |
+| |     / ____ \| |     | |     |  _  / | |  | || |\/| |
+| |____ /_/  \_\| |____ | |____ | | \ \ | |__| || |  | |
+ \_____/        \______| \_____||_|  \_\ \____/ |_|  |_|
 ART
-echo -e "${CYAN}  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
+echo -e "${CYAN}  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
 echo -e "  ${BOLD}🕶️  PETER THIEL REVIEW AGENT • 24/7 OPS DAEMON${RESET}"
 echo -e "  ${DIM}Krishna Engineering OS • Systems Thinking Framework${RESET}"
-echo -e "${CYAN}  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
+echo -e "${CYAN}  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
 
 # System Metrics
 UPTIME=$(uptime -p 2>/dev/null | sed 's/up //')
@@ -138,7 +138,7 @@ echo -e "  ${BLUE}📊 Load Avg:${RESET}  ${LOAD}"
 echo -e "  ${BLUE}💾 Memory:${RESET}    ${MEM_USED}MB / ${MEM_TOTAL}MB (${MEM_PERCENT}%)"
 echo -e "  ${BLUE}💿 Storage:${RESET}   ${DISK_USED}"
 echo -e "  ${BLUE}🤖 Bot Agent:${RESET} ${BOT_STATUS}"
-echo -e "${CYAN}  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
+echo -e "${CYAN}  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
 
 # Dynamic Thiel Principle of the Day
 QUOTES=(
@@ -150,7 +150,7 @@ QUOTES=(
 )
 RANDOM_QUOTE=${QUOTES[$RANDOM % ${#QUOTES[@]}]}
 echo -e "  ${YELLOW}💡 Thiel Principle:${RESET} ${DIM}${RANDOM_QUOTE}${RESET}"
-echo -e "${CYAN}  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\n"
+echo -e "${CYAN}  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\n"
 EOF
 chmod +x /root/.banner/motd.sh
 
