@@ -10,7 +10,6 @@ import logging
 from typing import Optional
 
 from config import (
-    CHANNELS,
     PRIMARY_GOALS_CHANNEL_ID,
     MONITORED_UPDATE_CHANNELS,
     SYSTEM_EMBED_TITLES,
