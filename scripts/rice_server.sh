@@ -92,175 +92,63 @@ EOF
 
 mkdir -p /root/.banner
 
-# 4. Create Custom Calcrum & Peter Thiel SSH Login Banner (MOTD)
-echo "🎨 Configuring Cyberpunk SSH Login Banner..."
-cat << 'EOF' > /root/.banner/motd.sh
-#!/usr/bin/env bash
+# 4. Install Brand-Accurate Calcrum Terminal Engine (calcrum.com design)
+echo "🎨 Installing Calcrum Brand Terminal Engine..."
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-# Colors
-CYAN="\033[1;36m"
-MAGENTA="\033[1;35m"
-GREEN="\033[1;32m"
-YELLOW="\033[1;33m"
-RED="\033[1;31m"
-BLUE="\033[1;34m"
-DIM="\033[2m"
-BOLD="\033[1m"
-RESET="\033[0m"
-
-clear
-
-# 1. Cyber Shades Mascot
-echo -e "${CYAN}"
-cat << 'SHADES'
-        ┌──────────────────┐      ┌──────────────────┐
-        │  ██████████████  ├──────┤  ██████████████  │
-        │  ████▀▀▀▀▀▀████  │      │  ████▀▀▀▀▀▀████  │
-        └──████▄▄▄▄▄▄████──┘      └──████▄▄▄▄▄▄████──┘
-SHADES
-
-# 2. Glowing ANSI Shadow CALCRUM Logo
-echo -e "${MAGENTA}"
-cat << 'LOGO'
-  ██████╗ █████╗ ██╗      ██████╗██████╗ ██╗   ██╗███╗   ███╗
- ██╔════╝██╔══██╗██║     ██╔════╝██╔══██╗██║   ██║████╗ ████║
- ██║     ███████║██║     ██║     ██████╔╝██║   ██║██╔████╔██║
- ██║     ██╔══██║██║     ██║     ██╔══██╗██║   ██║██║╚██╔╝██║
- ╚██████╗██║  ██║███████╗╚██████╗██║  ██║╚██████╔╝██║ ╚═╝ ██║
-  ╚═════╝╚═╝  ╚═╝╚══════╝ ╚═════╝╚═╝  ╚═╝ ╚═════╝ ╚═╝     ╚═╝
-LOGO
-
-echo -e "${CYAN}  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
-echo -e "  ${BOLD}🕶️  PETER THIEL REVIEW AGENT • 24/7 OPS DAEMON${RESET}"
-echo -e "  ${DIM}Krishna Engineering OS • Systems Thinking Framework${RESET}"
-echo -e "${CYAN}  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
-
-# System Metrics
-UPTIME=$(uptime -p 2>/dev/null | sed 's/up //')
-LOAD=$(cat /proc/loadavg | awk '{print $1, $2, $3}')
-MEM_TOTAL=$(free -m | awk '/Mem:/ {print $2}')
-MEM_USED=$(free -m | awk '/Mem:/ {print $3}')
-MEM_PERCENT=$(( MEM_USED * 100 / MEM_TOTAL ))
-DISK_USED=$(df -h / | awk 'NR==2 {print $3 "/" $2 " (" $5 ")"}')
-
-# Peter Thiel Bot Service Check
-if systemctl is-active --quiet peter-thiel.service 2>/dev/null; then
-    BOT_STATUS="${GREEN}● ACTIVE & RUNNING (24/7)${RESET}"
-else
-    BOT_STATUS="${RED}● STOPPED / INACTIVE${RESET}"
+if [ -f "$REPO_DIR/scripts/terminal/calcrum_term.py" ]; then
+    chmod +x "$REPO_DIR/scripts/terminal/calcrum_term.py"
+    cp -f "$REPO_DIR/scripts/terminal/calcrum_term.py" /usr/local/bin/calcrum
+    chmod +x /usr/local/bin/calcrum
+elif [ -f "/root/peter-thiel-review-agent/scripts/terminal/calcrum_term.py" ]; then
+    chmod +x "/root/peter-thiel-review-agent/scripts/terminal/calcrum_term.py"
+    cp -f "/root/peter-thiel-review-agent/scripts/terminal/calcrum_term.py" /usr/local/bin/calcrum
+    chmod +x /usr/local/bin/calcrum
 fi
 
-echo -e "  ${BLUE}⚡ Hostname:${RESET}  $(hostname) ${DIM}(Ubuntu $(lsb_release -rs 2>/dev/null || cat /etc/issue | awk '{print $2}'))${RESET}"
-echo -e "  ${BLUE}⏱️  Uptime:${RESET}    ${UPTIME}"
-echo -e "  ${BLUE}📊 Load Avg:${RESET}  ${LOAD}"
-echo -e "  ${BLUE}💾 Memory:${RESET}    ${MEM_USED}MB / ${MEM_TOTAL}MB (${MEM_PERCENT}%)"
-echo -e "  ${BLUE}💿 Storage:${RESET}   ${DISK_USED}"
-echo -e "  ${BLUE}🤖 Bot Agent:${RESET} ${BOT_STATUS}"
-echo -e "${CYAN}  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
-
-# Dynamic Thiel Principle of the Day
-QUOTES=(
-  "\"Competition is for losers. Build a monopoly through distinct compounding execution.\""
-  "\"The most contrarian thing of all is not to oppose the crowd, but to think for yourself.\""
-  "\"A great company is a conspiracy to change the world; when you share that secret, you recruit a conspirator.\""
-  "\"Brilliant thinking is rare, but courage is in even shorter supply than genius.\""
-  "\"Higher score follows monotonic execution with verifiable proof, not noise.\""
-  "\"Zero to one isn't about speed. It's about truth and irreplaceable value.\""
-)
-RANDOM_QUOTE=${QUOTES[$RANDOM % ${#QUOTES[@]}]}
-echo -e "  ${YELLOW}💡 Thiel Principle:${RESET} ${DIM}${RANDOM_QUOTE}${RESET}"
-echo -e "${CYAN}  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\n"
+# 5. Create MOTD Banner Hook
+cat << 'EOF' > /root/.banner/motd.sh
+#!/usr/bin/env bash
+if command -v calcrum &> /dev/null; then
+    exec calcrum login
+elif [ -f /usr/local/bin/calcrum ]; then
+    exec /usr/local/bin/calcrum login
+elif [ -f /root/peter-thiel-review-agent/scripts/terminal/calcrum_term.py ]; then
+    exec python3 /root/peter-thiel-review-agent/scripts/terminal/calcrum_term.py login
+fi
 EOF
 chmod +x /root/.banner/motd.sh
 
-# 5. Create Cyberpunk Shutdown & Reboot Screen
-echo "🛑 Configuring Cyberpunk Shutdown Screen..."
+# 6. Create Shutdown & Reboot Screen Hook
 cat << 'EOF' > /root/.banner/shutdown_screen.sh
 #!/usr/bin/env bash
-
-# Colors
-CYAN="\033[1;36m"
-MAGENTA="\033[1;35m"
-GREEN="\033[1;32m"
-YELLOW="\033[1;33m"
-RED="\033[1;31m"
-BOLD="\033[1m"
-DIM="\033[2m"
-RESET="\033[0m"
-
-ACTION="shutdown"
+ACTION="poweroff"
 if [[ "$1" == "reboot" ]] || [[ "$0" == *"reboot"* ]]; then
     ACTION="reboot"
 fi
 
-clear
-
-if [[ "$ACTION" == "reboot" ]]; then
-    echo -e "${CYAN}"
-    cat << 'REBOOT_ART'
-   ██████╗ ███████╗██████╗  ██████╗  ██████╗ ████████╗
-   ██╔══██╗██╔════╝██╔══██╗██╔═══██╗██╔═══██╗╚══██╔══╝
-   ██████╔╝█████╗  ██████╔╝██║   ██║██║   ██║   ██║   
-   ██╔══██╗██╔══╝  ██╔══██╗██║   ██║██║   ██║   ██║   
-   ██║  ██║███████╗██████╔╝╚██████╔╝╚██████╔╝   ██║   
-   ╚═╝  ╚═╝╚══════╝╚═════╝  ╚═════╝  ╚═════╝    ╚═╝   
-REBOOT_ART
-    echo -e "${MAGENTA}  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
-    echo -e "  ${BOLD}🔄  CALCRUM SERVER REBOOT INITIATED${RESET}"
-    echo -e "  ${DIM}All processes safely closing. Reconnecting in ~30s...${RESET}"
-    echo -e "${MAGENTA}  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\n"
+if command -v calcrum &> /dev/null; then
+    exec calcrum "$ACTION"
+elif [ -f /usr/local/bin/calcrum ]; then
+    exec /usr/local/bin/calcrum "$ACTION"
+elif [ -f /root/peter-thiel-review-agent/scripts/terminal/calcrum_term.py ]; then
+    exec python3 /root/peter-thiel-review-agent/scripts/terminal/calcrum_term.py "$ACTION"
 else
-    echo -e "${RED}"
-    cat << 'SHUTDOWN_ART'
-   ██████╗  ██████╗ ██╗    ██╗███████╗██████╗     ██████╗ ███████╗███████╗
-   ██╔══██╗██╔═══██╗██║    ██║██╔════╝██╔══██╗   ██╔═══██╗██╔════╝██╔════╝
-   ██████╔╝██║   ██║██║ █╗ ██║█████╗  ██████╔╝   ██║   ██║█████╗  █████╗  
-   ██╔═══╝ ██║   ██║██║███╗██║██╔══╝  ██╔══██╗   ██║   ██║██╔══╝  ██╔══╝  
-   ██║     ╚██████╔╝╚███╔███╔╝███████╗██║  ██║   ╚██████╔╝██║     ██║     
-   ╚═╝      ╚═════╝  ╚══╝╚══╝ ╚══════╝╚═╝  ╚═╝    ╚═════╝ ╚═╝     ╚═╝     
-SHUTDOWN_ART
-    echo -e "${RED}  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
-    echo -e "  ${BOLD}⚡ CALCRUM SERVER POWER DOWN INITIATED${RESET}"
-    echo -e "  ${DIM}\"Competition is for losers. Rest well, founder. Build a monopoly tomorrow.\"${RESET}"
-    echo -e "${RED}  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\n"
-fi
-
-echo -e "  ${YELLOW}[1/4]${RESET} Flushing filesystem buffers to disk... ${GREEN}✔ Done${RESET}"
-echo -e "  ${YELLOW}[2/4]${RESET} Committing SQLite founder ledger & reviews... ${GREEN}✔ Saved${RESET}"
-echo -e "  ${YELLOW}[3/4]${RESET} Peter Thiel Review Bot entering hibernate... ${GREEN}✔ Safe${RESET}"
-echo -e "  ${YELLOW}[4/4]${RESET} Sending ACPI power signal to hardware... ${CYAN}⚡ Goodbye${RESET}\n"
-
-sleep 1.2
-
-# Execute the underlying system call cleanly
-if [[ "$ACTION" == "reboot" ]]; then
-    /sbin/reboot
-else
-    /sbin/poweroff
+    /sbin/"$ACTION"
 fi
 EOF
 chmod +x /root/.banner/shutdown_screen.sh
 
-# 6. Create SSH Disconnect / Logout Banner
-echo "👋 Configuring SSH Logout Banner..."
+# 7. Create SSH Logout Banner Hook
 cat << 'EOF' > /root/.banner/logout.sh
 #!/usr/bin/env bash
-
-CYAN="\033[1;36m"
-MAGENTA="\033[1;35m"
-GREEN="\033[1;32m"
-BOLD="\033[1m"
-DIM="\033[2m"
-RESET="\033[0m"
-
-echo ""
-echo -e "${CYAN}  ╭─────────────────────────────────────────────────────────────╮${RESET}"
-echo -e "${CYAN}  │${RESET}  ${BOLD}🕶️  CALCRUM SECURE SESSION CLOSED${RESET}                         ${CYAN}│${RESET}"
-echo -e "${CYAN}  │${RESET}  ${GREEN}●${RESET} Peter Thiel Review Daemon remains active 24/7.             ${CYAN}│${RESET}"
-echo -e "${CYAN}  │                                                             │${RESET}"
-echo -e "${CYAN}  │${RESET}  ${DIM}\"Zero to one isn't about speed. It's about truth.\"${RESET}          ${CYAN}│${RESET}"
-echo -e "${CYAN}  ╰─────────────────────────────────────────────────────────────╯${RESET}"
-echo ""
+if command -v calcrum &> /dev/null; then
+    exec calcrum logout
+elif [ -f /usr/local/bin/calcrum ]; then
+    exec /usr/local/bin/calcrum logout
+elif [ -f /root/peter-thiel-review-agent/scripts/terminal/calcrum_term.py ]; then
+    exec python3 /root/peter-thiel-review-agent/scripts/terminal/calcrum_term.py logout
+fi
 EOF
 chmod +x /root/.banner/logout.sh
 
@@ -314,7 +202,8 @@ alias bot-stop='systemctl stop peter-thiel.service'
 alias bot-cd='cd /root/peter-thiel-review-agent'
 alias bot-score='cd /root/peter-thiel-review-agent && ./venv/bin/python -c "import asyncio; from cogs.scheduler import SchedulerCog; print(\"Triggering scoring manually...\")"'
 
-# Cyberpunk Power Controls
+# Calcrum Brand Controls
+alias motd='/root/.banner/motd.sh'
 alias shutdown='/root/.banner/shutdown_screen.sh shutdown'
 alias poweroff='/root/.banner/shutdown_screen.sh shutdown'
 alias reboot='/root/.banner/shutdown_screen.sh reboot'
