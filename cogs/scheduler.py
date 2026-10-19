@@ -123,7 +123,10 @@ class SchedulerCog(commands.Cog):
 
     @chronos_loop.before_loop
     async def before_chronos(self):
-        await self.bot.wait_until_ready()
+        if hasattr(self.bot, "wait_until_ready") and callable(self.bot.wait_until_ready):
+            res = self.bot.wait_until_ready()
+            if asyncio.iscoroutine(res):
+                await res
 
     async def sync_channel_history_for_today(self, target_date: Optional[datetime.date] = None):
         """Actively read monitored Discord channels for today's updates and save to DB."""
@@ -169,6 +172,24 @@ class SchedulerCog(commands.Cog):
                             break
                     if is_sys:
                         continue
+
+                    # Check for GitHub webhook updates (PRs, commits, branches)
+                    if tracker_cog:
+                        gh_updates = tracker_cog._extract_github_updates(msg)
+                        if gh_updates:
+                            msg_ist = msg.created_at.astimezone(TIMEZONE)
+                            for idx, (f_key, gh_content) in enumerate(gh_updates):
+                                effective_mid = msg.id if idx == 0 else (msg.id * 100 + idx)
+                                author_id = FOUNDERS[f_key].get("discord_id", msg.author.id)
+                                await save_channel_update(
+                                    message_id=effective_mid,
+                                    founder_key=f_key,
+                                    discord_user_id=author_id,
+                                    channel_id=channel.id,
+                                    content=gh_content,
+                                    timestamp=msg_ist.isoformat(),
+                                )
+                            continue
 
                     # Build content including embed descriptions for assistant posts
                     content = msg.content.strip()

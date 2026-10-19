@@ -7,7 +7,8 @@ import discord
 from discord.ext import commands
 from datetime import datetime, timedelta
 import logging
-from typing import Optional
+import re
+from typing import Optional, List, Tuple
 
 from config import (
     CHANNELS,
@@ -37,6 +38,100 @@ class TrackerCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
+    def _resolve_github_username(self, name: str) -> Optional[str]:
+        """Match a GitHub username or alias to one of the founders."""
+        if not name:
+            return None
+        clean = name.lower().strip()
+        # Direct match in github_usernames or usernames
+        for key, info in FOUNDERS.items():
+            for gh in info.get("github_usernames", []):
+                if gh.lower() == clean:
+                    return key
+            for alias in info.get("usernames", []):
+                if alias.lower() == clean:
+                    return key
+
+        # Substring / fuzzy match
+        for key, info in FOUNDERS.items():
+            if key in clean:
+                return key
+            for gh in info.get("github_usernames", []):
+                if gh.lower() in clean or clean in gh.lower():
+                    return key
+            for alias in info.get("usernames", []):
+                if len(alias) >= 4 and alias.lower() in clean:
+                    return key
+        return None
+
+    def _extract_github_updates(self, message: discord.Message) -> List[Tuple[str, str]]:
+        """
+        Inspect message for GitHub webhook or bot activity.
+        Returns a list of (founder_key, formatted_content).
+        """
+        is_github = (
+            "github" in (message.author.name or "").lower()
+            or bool(getattr(message, "webhook_id", None))
+        )
+        if not is_github or not message.embeds:
+            return []
+
+        results = []
+        for e in message.embeds:
+            title = getattr(e, "title", "") or ""
+            desc = getattr(e, "description", "") or ""
+            url = getattr(e, "url", "") or ""
+            author_obj = getattr(e, "author", None)
+            author_name = (getattr(author_obj, "name", "") or "").strip()
+
+            # Filter CI/CD noise
+            author_lower = author_name.lower()
+            if any(b in author_lower for b in ("vercel", "dependabot", "github-actions", "[bot]")):
+                continue
+            if any(n in title.lower() for n in ("unresolved feedback", "vercel checks success", "api failure")):
+                continue
+
+            founder_key = None
+            if author_name:
+                founder_key = self._resolve_github_username(author_name)
+
+            if not founder_key:
+                # Check title or desc for author attribution (e.g. "- joshihridesh001-png")
+                words = re.findall(r'[\w\-]+', f"{title} {desc}")
+                for w in words:
+                    matched = self._resolve_github_username(w)
+                    if matched:
+                        founder_key = matched
+                        if not author_name:
+                            author_name = w
+                        break
+
+            if not founder_key:
+                continue
+
+            # Tag the update appropriately
+            title_lower = title.lower()
+            if "/pull/" in url or "pull request" in title_lower:
+                tag = "GitHub PR"
+            elif "/commit/" in url or "commit" in title_lower:
+                tag = "GitHub Commit"
+            elif "branch" in title_lower:
+                tag = "GitHub Branch"
+            else:
+                tag = "GitHub Update"
+
+            lines = [f"[{tag}: {title}]"]
+            if author_name:
+                lines.append(f"Author: {author_name}")
+            if url:
+                lines.append(f"URL: {url}")
+            if desc:
+                lines.append(f"Summary of work:\n{desc}")
+
+            results.append((founder_key, "\n".join(lines)))
+
+        return results
+
     def _resolve_founder_key(self, author_id: int, author_name: str, is_bot: bool = False) -> Optional[str]:
         """Match author to one of the 3 founders (Hridesh, Swarit, Rahul), including assistant bots."""
         lower_name = author_name.lower().strip()
@@ -44,11 +139,11 @@ class TrackerCog(commands.Cog):
         # 1. Bot messages attribution
         if is_bot:
             # Peter Thiel bot is Hridesh's personal assistant dropping sales & ops updates
-            if "peter thiel" in lower_name or (self.bot.user and author_id == self.bot.user.id):
+            if "peter thiel" in lower_name or "ceo" in lower_name or (self.bot.user and author_id == self.bot.user.id):
                 return "hridesh"
-            if "rahul" in lower_name:
+            if "rahul" in lower_name or "coo" in lower_name:
                 return "rahul"
-            if "swarit" in lower_name:
+            if "swarit" in lower_name or "cto" in lower_name:
                 return "swarit"
 
         # 2. Direct Discord ID match
@@ -69,16 +164,96 @@ class TrackerCog(commands.Cog):
 
         return None
 
+    async def sync_recent_channel_updates(self, limit: int = 100) -> int:
+        """
+        Scan monitored channels for any recent updates (including GitHub PRs/commits)
+        that were missed and backfill them into the database.
+        """
+        synced_count = 0
+        now = datetime.now(TIMEZONE)
+        for channel_id in MONITORED_UPDATE_CHANNELS:
+            channel = self.bot.get_channel(channel_id)
+            if not channel or not hasattr(channel, "history"):
+                continue
+            try:
+                async for message in channel.history(limit=limit):
+                    # Check GitHub updates
+                    gh_updates = self._extract_github_updates(message)
+                    if gh_updates:
+                        for idx, (f_key, gh_content) in enumerate(gh_updates):
+                            effective_mid = message.id if idx == 0 else (message.id * 100 + idx)
+                            author_id = FOUNDERS[f_key].get("discord_id", message.author.id)
+                            msg_time = message.created_at.astimezone(TIMEZONE).isoformat() if hasattr(message.created_at, "astimezone") else now.isoformat()
+                            saved_id = await save_channel_update(
+                                message_id=effective_mid,
+                                founder_key=f_key,
+                                discord_user_id=author_id,
+                                channel_id=channel_id,
+                                content=gh_content,
+                                timestamp=msg_time,
+                            )
+                            if saved_id:
+                                synced_count += 1
+                                logger.info(f"Backfilled GitHub update for {f_key}: {gh_content[:50]}...")
+                    else:
+                        # Check normal human/bot updates
+                        f_key = self._resolve_founder_key(message.author.id, message.author.name, is_bot=message.author.bot)
+                        if f_key and not message.author.bot:
+                            content = await enrich_discord_message(message, self.bot)
+                            if content.strip() and channel_id != PRIMARY_GOALS_CHANNEL_ID:
+                                msg_time = message.created_at.astimezone(TIMEZONE).isoformat() if hasattr(message.created_at, "astimezone") else now.isoformat()
+                                saved_id = await save_channel_update(
+                                    message_id=message.id,
+                                    founder_key=f_key,
+                                    discord_user_id=message.author.id,
+                                    channel_id=channel_id,
+                                    content=content,
+                                    timestamp=msg_time,
+                                )
+                                if saved_id:
+                                    synced_count += 1
+            except Exception as e:
+                logger.warning(f"Failed to sync history for channel {channel_id}: {e}")
+        return synced_count
+
+    @commands.Cog.listener()
+    async def on_ready(self):
+        """On bot ready, run channel history sync to backfill any offline updates."""
+        logger.info("Running initial channel history synchronization...")
+        count = await self.sync_recent_channel_updates(limit=100)
+        logger.info(f"Initial sync complete: backfilled {count} updates.")
+
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
-        """Intercept messages to capture nightly goals or daytime updates."""
+        """Intercept messages to capture nightly goals, GitHub PRs/commits, or daytime updates."""
         # 1. Ignore automated bot embeds generated by the review system itself
         for e in message.embeds:
             title = e.title or ""
             if any(ignored in title for ignored in SYSTEM_EMBED_TITLES):
                 return
 
-        # 2. Resolve founder (including assistant bots)
+        channel_id = message.channel.id
+        now = datetime.now(TIMEZONE)
+
+        # 2. Check for GitHub webhook updates (PRs, commits, branches)
+        gh_updates = self._extract_github_updates(message)
+        if gh_updates and channel_id in MONITORED_UPDATE_CHANNELS:
+            for idx, (f_key, gh_content) in enumerate(gh_updates):
+                effective_mid = message.id if idx == 0 else (message.id * 100 + idx)
+                author_id = FOUNDERS[f_key].get("discord_id", message.author.id)
+                msg_time = message.created_at.astimezone(TIMEZONE).isoformat() if hasattr(message.created_at, "astimezone") else now.isoformat()
+                await save_channel_update(
+                    message_id=effective_mid,
+                    founder_key=f_key,
+                    discord_user_id=author_id,
+                    channel_id=channel_id,
+                    content=gh_content,
+                    timestamp=msg_time,
+                )
+                logger.info(f"Logged GitHub update for {f_key} ({author_id}) in channel {channel_id}: {gh_content[:60]}...")
+            return
+
+        # 3. Resolve founder (including assistant bots)
         founder_key = self._resolve_founder_key(
             message.author.id,
             message.author.name,
@@ -88,8 +263,6 @@ class TrackerCog(commands.Cog):
         if not founder_key:
             return
 
-        now = datetime.now(TIMEZONE)
-        channel_id = message.channel.id
         content = await enrich_discord_message(message, self.bot)
 
         if not content.strip():

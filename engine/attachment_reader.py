@@ -7,6 +7,7 @@ Extracts contents from:
 - Discord cross-channel message jump links
 """
 
+import os
 import aiohttp
 import asyncio
 import logging
@@ -110,20 +111,26 @@ DISCORD_MSG_PATTERN = re.compile(r'https?://(?:ptb\.|canary\.)?discord\.com/chan
 async def enrich_message_links(content: str, bot_client=None) -> str:
     """Enrich URLs like GitHub PRs, commits, or Discord message references with title/summary."""
     extra_snippets = []
+    gh_headers = {"User-Agent": "Peter-Thiel-Review-Bot"}
+    gh_token = os.getenv("GITHUB_TOKEN", "").strip()
+    if gh_token:
+        gh_headers["Authorization"] = f"token {gh_token}"
 
     # 1. GitHub PRs
     for owner, repo, pr_num in GH_PR_PATTERN.findall(content):
         api_url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_num}"
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(api_url, timeout=aiohttp.ClientTimeout(total=5.0)) as resp:
+                async with session.get(api_url, headers=gh_headers, timeout=aiohttp.ClientTimeout(total=5.0)) as resp:
                     if resp.status == 200:
                         data = await resp.json()
                         title = data.get("title", "")
                         state = data.get("state", "open")
                         files = data.get("changed_files", 0)
+                        body = (data.get("body", "") or "").strip()
+                        body_snippet = f"\nSummary of work:\n{body[:300]}..." if body else ""
                         extra_snippets.append(
-                            f"[GitHub PR #{pr_num}: {title} ({state}, {files} files changed)]"
+                            f"[GitHub PR #{pr_num}: {title} ({state}, {files} files changed)]{body_snippet}"
                         )
         except Exception as e:
             logger.debug(f"GitHub PR fetch skipped: {e}")
@@ -133,7 +140,7 @@ async def enrich_message_links(content: str, bot_client=None) -> str:
         api_url = f"https://api.github.com/repos/{owner}/{repo}/commits/{sha}"
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(api_url, timeout=aiohttp.ClientTimeout(total=5.0)) as resp:
+                async with session.get(api_url, headers=gh_headers, timeout=aiohttp.ClientTimeout(total=5.0)) as resp:
                     if resp.status == 200:
                         data = await resp.json()
                         msg = data.get("commit", {}).get("message", "").split("\n")[0]
@@ -165,15 +172,47 @@ async def enrich_message_links(content: str, bot_client=None) -> str:
 from pathlib import Path
 
 async def enrich_discord_message(message, bot_client=None) -> str:
-    """Master helper to merge message text, attachment contents, and links."""
+    """Master helper to merge message text, embed contents, attachment contents, and links."""
     content = (getattr(message, "content", "") or "").strip()
 
-    # Append embed descriptions
+    # Append embed descriptions, titles, authors, and URLs
     for e in getattr(message, "embeds", []):
-        desc = getattr(e, "description", None)
+        raw_title = getattr(e, "title", None)
+        title = str(raw_title).strip() if isinstance(raw_title, str) else ""
+
+        raw_desc = getattr(e, "description", None)
+        desc = str(raw_desc).strip() if isinstance(raw_desc, str) else ""
+
+        raw_url = getattr(e, "url", None)
+        url = str(raw_url).strip() if isinstance(raw_url, str) else ""
+
+        author_name = ""
+        author_obj = getattr(e, "author", None)
+        if author_obj:
+            raw_author_name = getattr(author_obj, "name", None)
+            if isinstance(raw_author_name, str):
+                author_name = raw_author_name.strip()
+
+        parts = []
+        if author_name:
+            parts.append(f"Author: {author_name}")
+        if url:
+            parts.append(f"URL: {url}")
         if desc:
-            title = getattr(e, "title", "") or ""
-            content += f"\n[Embed: {title}] {desc}"
+            parts.append(desc)
+        for field in getattr(e, "fields", []):
+            fname = getattr(field, "name", "")
+            fval = getattr(field, "value", "")
+            if isinstance(fname, str) and isinstance(fval, str) and (fname or fval):
+                parts.append(f"{fname}: {fval}")
+
+        embed_body = "\n".join(parts)
+        if title and embed_body:
+            content += f"\n[Embed: {title}] {embed_body}".strip()
+        elif title:
+            content += f"\n[Embed: {title}]".strip()
+        elif embed_body:
+            content += f"\n{embed_body}".strip()
 
     # Extract attachments
     for att in getattr(message, "attachments", []):

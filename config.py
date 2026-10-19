@@ -91,7 +91,8 @@ FOUNDERS = {
             "Team direction, systems architecture & bottleneck removal",
         ],
         "discord_id": int(os.getenv("DISCORD_USER_HRIDESH", "1159464740788109312")),
-        "usernames": ["hridesh_joshi", "hridesh"],
+        "usernames": ["hridesh_joshi", "hridesh", "joshihridesh001-png", "joshihridesh", "ceo"],
+        "github_usernames": ["joshihridesh001-png", "joshihridesh"],
     },
     "swarit": {
         "display_name": "Swarit",
@@ -105,7 +106,8 @@ FOUNDERS = {
             "Technical documentation, refactoring & security",
         ],
         "discord_id": int(os.getenv("DISCORD_USER_SWARIT", "1419294391041921125")),
-        "usernames": ["swarit_soni", "swarit"],
+        "usernames": ["swarit_soni", "swarit", "swarit-soni", "swaritsoni", "cto", "cto's assistant"],
+        "github_usernames": ["swarit-soni", "swarit_soni", "swaritsoni"],
     },
     "rahul": {
         "display_name": "Rahul",
@@ -119,7 +121,8 @@ FOUNDERS = {
             "Cross-functional blocker clearing & team coordination",
         ],
         "discord_id": int(os.getenv("DISCORD_USER_RAHUL", "1541842669922295980")),
-        "usernames": ["2muchmotion__", "rahul", "rahul's bitch"],
+        "usernames": ["2muchmotion__", "2muchmotion", "rahul", "rahul's bitch", "coo"],
+        "github_usernames": ["2muchmotion__", "2muchmotion", "rahul"],
     },
 }
 

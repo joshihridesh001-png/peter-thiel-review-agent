@@ -246,6 +246,25 @@ class CommandsCog(commands.Cog):
         )
         await interaction.response.send_message(embed=embed)
 
+    @app_commands.command(name="sync-updates", description="Scan and backfill recent GitHub PRs, commits, and chat updates")
+    @app_commands.describe(limit="Number of recent messages to inspect per channel (default 100)")
+    async def sync_updates(self, interaction: discord.Interaction, limit: Optional[int] = 100):
+        """Scan channels and backfill any missed GitHub PRs/commits or chat updates."""
+        await interaction.response.defer()
+        tracker_cog = self.bot.get_cog("TrackerCog")
+        if not tracker_cog:
+            await interaction.followup.send("TrackerCog not loaded.")
+            return
+
+        lim = max(10, min(200, limit or 100))
+        count = await tracker_cog.sync_recent_channel_updates(limit=lim)
+        embed = discord.Embed(
+            title="🔄 Channel History Synchronized",
+            description=f"Scanned monitored channels ({lim} messages each) and backfilled **{count}** updates (including GitHub PRs & commits) into the founder ledger.",
+            color=COLOR_SUCCESS
+        )
+        await interaction.followup.send(embed=embed)
+
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(CommandsCog(bot))
