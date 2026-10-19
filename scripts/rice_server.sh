@@ -210,5 +210,69 @@ alias reboot='/root/.banner/shutdown_screen.sh reboot'
 # END CALCRUM RICE
 EOF
 
-echo "✨ Server Rice Complete! SSH Login, Logout, and Shutdown art is armed."
-echo "👉 Run: source ~/.bashrc to see the new login screen right now!"
+# 8. Configure Fish shell if installed or configured
+if command -v fish &> /dev/null || [ -d "/root/.config/fish" ]; then
+    echo "🐟 Detected Fish shell! Wiring Calcrum hooks into ~/.config/fish/config.fish..."
+    mkdir -p /root/.config/fish
+    touch /root/.config/fish/config.fish
+    sed -i '/# BEGIN CALCRUM RICE/,/# END CALCRUM RICE/d' /root/.config/fish/config.fish
+
+    cat << 'EOF' >> /root/.config/fish/config.fish
+
+# BEGIN CALCRUM RICE
+# Disable default greeting
+set -g fish_greeting ""
+
+# Run Calcrum login on interactive sessions
+if status is-interactive
+    if type -q calcrum
+        calcrum login
+    end
+end
+
+# Starship Prompt
+if type -q starship
+    starship init fish | source
+end
+
+# Calcrum Brand Controls
+alias motd="calcrum login"
+alias shutdown="calcrum poweroff"
+alias poweroff="calcrum poweroff"
+alias reboot="calcrum reboot"
+
+# Modern Replacements
+if type -q eza
+    alias ls="eza --icons --group-directories-first"
+    alias ll="eza -la --icons --git --group-directories-first"
+    alias tree="eza --tree --icons"
+end
+
+if type -q bat
+    alias cat="bat --paging=never --style=plain"
+end
+
+alias top="btop"
+alias sysinfo="fastfetch 2>/dev/null; or neofetch 2>/dev/null; or uname -a"
+
+# Peter Thiel Bot Shortcuts
+alias bot-status="systemctl status peter-thiel.service"
+alias bot-logs="journalctl -u peter-thiel.service -f -n 50"
+alias bot-restart="systemctl restart peter-thiel.service; and echo '✅ Peter Thiel restarted!'"
+alias bot-stop="systemctl stop peter-thiel.service"
+alias bot-cd="cd /root/peter-thiel-review-agent"
+
+# Disconnect banner on exit
+function __calcrum_exit --on-event fish_exit
+    if type -q calcrum
+        calcrum logout
+    end
+end
+# END CALCRUM RICE
+EOF
+fi
+
+echo "✨ Server Rice Complete! SSH Login, Logout, and Shutdown art is armed for Bash & Fish."
+echo "👉 In Fish run: source ~/.config/fish/config.fish"
+echo "👉 In Bash run: source ~/.bashrc"
+
