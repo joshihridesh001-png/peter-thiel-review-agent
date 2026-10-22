@@ -10,7 +10,7 @@ from discord import app_commands
 from datetime import datetime
 from typing import Optional, Literal
 
-from config import FOUNDERS, PRIMARY_GOALS_CHANNEL_ID, LEADERSHIP_CHANNEL_ID
+from config import FOUNDERS
 from database.models import (
     update_founder_discord_id,
     get_all_users,
