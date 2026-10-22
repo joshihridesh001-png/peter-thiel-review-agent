@@ -598,6 +598,10 @@ def _run_step(label, fn):
 
 
 def power(action, assume_yes=False, dry_run=False):
+    if action not in ("poweroff", "reboot"):
+        print(f"Error: Invalid power action '{action}'")
+        return 1
+
     _setup_layout()
     host = socket.gethostname()
 
