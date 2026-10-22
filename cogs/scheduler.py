@@ -41,6 +41,7 @@ from database.models import (
     save_channel_update,
     record_peer_reaction,
     get_scores_in_date_range,
+    get_all_scores_in_date_range,
     record_monthly_equity_tranche,
     get_latest_equity_status,
     get_recent_founder_context,
@@ -503,9 +504,11 @@ class SchedulerCog(commands.Cog):
         end_date = datetime.now(TIMEZONE).date()
         start_date = end_date - timedelta(days=6)
 
+        all_scores = await get_all_scores_in_date_range(start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d"))
+
         weekly_payload = {}
         for key in FOUNDERS.keys():
-            scores = await get_scores_in_date_range(key, start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d"))
+            scores = [s for s in all_scores if s["founder_key"] == key]
             weekly_payload[key] = {
                 "name": FOUNDERS[key]["display_name"],
                 "role": FOUNDERS[key]["role"],
@@ -554,9 +557,11 @@ class SchedulerCog(commands.Cog):
         start_date = last_day_prev.replace(day=1).strftime("%Y-%m-%d")
         end_date = last_day_prev.strftime("%Y-%m-%d")
 
+        all_month_scores = await get_all_scores_in_date_range(start_date, end_date)
+
         # Sum monthly scores for Swarit (CTO) and Rahul (COO)
-        swarit_scores = await get_scores_in_date_range("swarit", start_date, end_date)
-        rahul_scores = await get_scores_in_date_range("rahul", start_date, end_date)
+        swarit_scores = [s for s in all_month_scores if s["founder_key"] == "swarit"]
+        rahul_scores = [s for s in all_month_scores if s["founder_key"] == "rahul"]
 
         total_swarit = sum([s["final_score"] for s in swarit_scores])
         total_rahul = sum([s["final_score"] for s in rahul_scores])
