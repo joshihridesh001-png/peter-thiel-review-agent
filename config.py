@@ -26,6 +26,8 @@ DB_PATH = DATA_DIR / "founder_ops.db"
 
 # Discord Bot Token
 DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN", "").strip()
+if not DISCORD_BOT_TOKEN:
+    raise ValueError("DISCORD_BOT_TOKEN environment variable is not set. A valid Discord bot token is required for operation.")
 
 # Gemini API Key
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
