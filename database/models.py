@@ -224,6 +224,23 @@ async def get_scores_in_date_range(founder_key: str, start_date: str, end_date: 
             return results
 
 
+async def get_all_scores_in_date_range(start_date: str, end_date: str) -> List[Dict[str, Any]]:
+    """Get all daily scores for all founders between start_date and end_date (inclusive)."""
+    async with get_db() as db:
+        async with db.execute("""
+            SELECT * FROM daily_scores
+            WHERE score_date >= ? AND score_date <= ?
+            ORDER BY score_date ASC;
+        """, (start_date, end_date)) as cursor:
+            rows = await cursor.fetchall()
+            results = []
+            for r in rows:
+                item = dict(r)
+                item["breakdown_json"] = json.loads(item["breakdown_json"])
+                results.append(item)
+            return results
+
+
 async def record_monthly_equity_tranche(
     month_index: int,
     year_month: str,
