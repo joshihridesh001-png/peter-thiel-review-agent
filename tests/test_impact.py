@@ -1,6 +1,6 @@
 """Same work gets the same size. A count is not the size."""
 
-from engine.credit import assign_credit
+from engine.credit import assign_credit, prior_from_scores
 from engine.impact import work_size
 from engine.scoring import compute_daily_score
 
@@ -75,6 +75,95 @@ def test_money_in_is_size_five_only_with_proof():
     assert "size 5" in sentence["rahul"][0]["score_reason"].lower()
     assert proven["rahul"][0]["complexity"] == 5
     assert _points(proven["rahul"]) == 5.0
+
+
+def test_different_customers_are_separate_calls_and_the_fourth_is_quartered():
+    notes = [
+        "Booked a call with Gyro\nhttps://example.com/gyro.mp4",
+        "Booked a call with Acme\nhttps://example.com/acme.mp4",
+        "Booked a call with Northwind\nhttps://example.com/northwind.mp4",
+        "Booked a call with Contoso\nhttps://example.com/contoso.mp4",
+    ]
+    result = assign_credit([
+        {"founder_key": "yash", "content": note} for note in notes
+    ])
+    calls = result["yash"]
+    assert len(calls) == 4
+    assert calls[0]["complexity"] == 2
+    assert calls[3]["stack_discount"] == 0.25
+    assert "quarter" in calls[3]["score_reason"].lower()
+    scored = compute_daily_score(calls, reactions=[], author_discord_id=0)
+    assert scored["task_breakdown"][0]["task_points"] == 2.0
+    assert scored["task_breakdown"][3]["task_points"] == 0.5
+
+
+def test_the_same_customer_is_one_call():
+    result = assign_credit([
+        {"founder_key": "yash", "content": "Booked a call with Jay"},
+        {"founder_key": "yash", "content": "Booked Jay again"},
+    ])
+    assert len(result["yash"]) == 1
+    assert "same customer" in result["yash"][0]["score_reason"].lower()
+
+
+def test_a_win_from_last_week_does_not_score_again():
+    url = "https://github.com/calcrum/app/pull/12"
+    first = assign_credit([{
+        "founder_key": "swarit",
+        "content": f"[GitHub PR: Add the meta pixel]\nAuthor: swarit-soni\nURL: {url}\nmerged",
+    }])
+    again = assign_credit(
+        [{
+            "founder_key": "swarit",
+            "content": f"[GitHub PR: Add the meta pixel]\nAuthor: swarit-soni\nURL: {url}\nmerged",
+        }],
+        prior=[{
+            "founder_key": "swarit",
+            "text": first["swarit"][0]["task"] + " " + url,
+        }],
+    )
+    assert again["swarit"][0]["completion"] == 0.0
+    assert "7 days" in again["swarit"][0]["score_reason"].lower()
+
+
+def test_the_same_customer_does_not_score_again_this_week():
+    again = assign_credit(
+        [{"founder_key": "yash", "content": "Booked a call with Gyro Farms"}],
+        prior=[{"founder_key": "yash", "text": "Booked a call with Gyro"}],
+    )
+    assert again["yash"][0]["completion"] == 0.0
+    assert "7 days" in again["yash"][0]["score_reason"].lower()
+    other_rep = assign_credit(
+        [{"founder_key": "shivang", "content": "Booked a call with Gyro Farms"}],
+        prior=[{"founder_key": "yash", "text": "Booked a call with Gyro"}],
+    )
+    assert other_rep["shivang"][0]["completion"] == 0.3
+
+
+def test_a_zero_line_from_last_week_does_not_block_today():
+    prior = prior_from_scores([{
+        "founder_key": "yash",
+        "breakdown_json": {
+            "task_breakdown": [
+                {"task": "Booked a call with Gyro", "completion": 0.0, "evidence": "Booked a call with Gyro"},
+            ]
+        },
+    }])
+    assert prior == []
+    today = assign_credit(
+        [{"founder_key": "yash", "content": "Booked a call with Gyro"}],
+        prior=prior,
+    )
+    assert today["yash"][0]["completion"] == 0.3
+
+
+def test_a_new_poke_still_scores_the_next_day():
+    again = assign_credit(
+        [{"founder_key": "rahul", "content": "Sent 80 connection requests on LinkedIn"}],
+        prior=[{"founder_key": "rahul", "text": "Sent 5 connection requests on LinkedIn"}],
+    )
+    assert again["rahul"][0]["completion"] == 0.3
+    assert again["rahul"][0]["complexity"] == 1
 
 
 def test_a_booked_call_beats_a_poke():
