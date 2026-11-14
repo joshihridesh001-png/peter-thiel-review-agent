@@ -47,7 +47,7 @@ from database.models import (
     get_latest_equity_status,
     get_recent_founder_context,
 )
-from engine.credit import assign_credit
+from engine.credit import assign_credit, prior_from_scores
 from engine.impact import praise_for_scored_lines, size_label
 from engine.evaluator import evaluate_daily_execution_with_ai
 from engine.scoring import compute_daily_score
@@ -485,7 +485,11 @@ class SchedulerCog(commands.Cog):
                     day_updates.append(update)
 
         # One pass over the whole day. The speaker does not keep the build.
-        credited = assign_credit(day_updates)
+        # Today's own card is not in the lookback, so a rerun does not zero today's work.
+        prior_start = (target_date - timedelta(days=7)).isoformat()
+        prior_end = (target_date - timedelta(days=1)).isoformat()
+        prior_rows = await get_all_scores_in_date_range(prior_start, prior_end)
+        credited = assign_credit(day_updates, prior_from_scores(prior_rows))
 
         async def score_one(key, info):
             goals_record = await get_goals_for_date(key, today_str)
