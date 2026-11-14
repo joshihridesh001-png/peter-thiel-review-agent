@@ -52,12 +52,13 @@ def compute_daily_score(
         w = float(t.get("complexity", 3))
         a = float(t.get("dharma_multiplier", 1.0))
 
-        # Anti-task-stuffing rule: limit trivial tasks
-        discount = 1.0
+        # Anti-task-stuffing rule: limit trivial tasks.
+        # A 4th booked call in one day uses the same quarter, set by credit.
+        discount = float(t.get("stack_discount", 1.0) or 1.0)
         if w <= 1.0:
             w1_count += 1
             if w1_count > 3:
-                discount = 0.25  # 75% penalty on 4th+ trivial chore
+                discount = min(discount, 0.25)
 
         task_points = c * w * a * discount
         weighted_task_sum += task_points
@@ -72,6 +73,7 @@ def compute_daily_score(
             "evidence": t.get("evidence_snippet", ""),
             "score_reason": t.get("score_reason", t.get("evidence_snippet", "")),
             "rubric_size": int(t.get("rubric_size", w)),
+            "seen_urls": list(t.get("seen_urls") or []),
         })
 
     # Calculate peer factor

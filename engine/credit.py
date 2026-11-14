@@ -5,6 +5,7 @@ Saying a thing is done is not the same as doing it. One piece of work
 is scored once, for the person who did it.
 """
 
+import json
 import re
 from typing import Any, Dict, List, Optional
 
@@ -263,6 +264,7 @@ def _task(title: str, completion: float, reason: str, evidence: str) -> Dict[str
             "dharma_multiplier": 1.0,
             "score_reason": "A voice note with no transcript scores 0. Type what was said.",
             "evidence_snippet": body.strip()[:120],
+            "seen_urls": [],
         }
     grade = proof_grade(body)
     # A LinkedIn link confirms the poke. It must not unlock a sale or a ship.
@@ -284,6 +286,7 @@ def _task(title: str, completion: float, reason: str, evidence: str) -> Dict[str
         "dharma_multiplier": 1.0,
         "score_reason": reason,
         "evidence_snippet": body[:120],
+        "seen_urls": _urls(body),
     }
 
 
@@ -562,11 +565,14 @@ def _decide_cluster(
     _append(buckets, doer, _task(_label(evidence), completion, reason, evidence))
 
 
-def assign_credit(updates: Optional[List[Dict[str, Any]]]) -> Dict[str, List[Dict[str, Any]]]:
+def assign_credit(
+    updates: Optional[List[Dict[str, Any]]],
+    prior: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, List[Dict[str, Any]]]:
     """Split the day's notes into one task list per person.
 
     The caller adds those lists up. This function does not talk to Discord
-    or to a model.
+    or to a model. `prior` is work already scored in the last 7 days.
     """
     roster_names = _roster_names()
     items = []
@@ -584,16 +590,65 @@ def assign_credit(updates: Optional[List[Dict[str, Any]]]) -> Dict[str, List[Dic
     buckets: Dict[str, List[Dict[str, Any]]] = {}
     for cluster in _cluster(items):
         _decide_cluster(cluster, roster_names, url_owners, buckets)
-    return _collapse_outreach(buckets)
+    collapsed = _collapse_outreach(buckets)
+    collapsed = _collapse_booked_calls(collapsed)
+    collapsed = _drop_recent_repeats(collapsed, prior)
+    return _cap_booked_calls(collapsed)
+
+
+_CALL_MARKERS = (
+    "booked",
+    "had a call",
+    "had the call",
+    "had a demo",
+    "demo call",
+    "on the call",
+    "meeting set",
+)
+_WIN_VERBS = ("booked", "paid", "merged", "deployed", "shipped", "closed")
+_CUSTOMER_SKIP = _STOPWORDS | frozenset({
+    "call", "calls", "demo", "meeting", "meet", "booked", "booking",
+    "pilot", "follow", "followup", "whatsapp", "linkedin", "inmail",
+    "connects", "request", "requests", "outreach", "cold", "email",
+    "emails", "message", "messages", "note", "notes",
+})
+
+
+def _task_blob(task: Dict[str, Any]) -> str:
+    urls = " ".join(task.get("seen_urls") or [])
+    return f"{task.get('task', '')} {task.get('evidence_snippet', '')} {urls}"
+
+
+def _is_call(task: Dict[str, Any]) -> bool:
+    blob = _task_blob(task).lower()
+    return any(marker in blob for marker in _CALL_MARKERS)
+
+
+def _win_verb(text: str) -> Optional[str]:
+    blob = (text or "").lower()
+    for verb in _WIN_VERBS:
+        if re.search(r"\b" + re.escape(verb) + r"\b", blob):
+            return verb
+    return None
+
+
+def _customer_tokens(text: str, roster_names: Dict[str, List[str]]) -> set:
+    # The link is not the customer. example.com must not glue Gyro and Acme.
+    words = re.findall(r"[a-z0-9]{3,}", _URL.sub(" ", text or "").lower())
+    alias_words = {alias for aliases in roster_names.values() for alias in aliases}
+    return {
+        word for word in words
+        if word not in _CUSTOMER_SKIP and word not in alias_words
+    }
 
 
 def _collapse_outreach(buckets: Dict[str, List[Dict[str, Any]]]) -> Dict[str, List[Dict[str, Any]]]:
-    """Five poke notes are one chore. They do not add up to five scores."""
+    """Five poke notes are one chore. A booked call is not a poke."""
     collapsed: Dict[str, List[Dict[str, Any]]] = {}
     for founder_key, tasks in buckets.items():
         outreach = [
             task for task in tasks
-            if is_outreach(f"{task.get('evidence_snippet', '')} {task.get('task', '')}")
+            if is_outreach(_task_blob(task)) and not _is_call(task)
         ]
         if len(outreach) <= 1:
             collapsed[founder_key] = tasks
@@ -610,3 +665,136 @@ def _collapse_outreach(buckets: Dict[str, List[Dict[str, Any]]]) -> Dict[str, Li
         )
         collapsed[founder_key] = rest + [merged]
     return collapsed
+
+
+def _merge_call_group(group: List[Dict[str, Any]], unnamed: bool) -> Dict[str, Any]:
+    best = max(group, key=lambda task: (task.get("completion", 0), task.get("complexity", 1)))
+    merged = dict(best)
+    if len(group) == 1:
+        return merged
+    if unnamed:
+        merged["task"] = "Booked calls"
+        extra = "No customer name, so these bookings count as one call."
+    else:
+        extra = "Same customer, so these notes are one call."
+    merged["score_reason"] = f"{str(merged.get('score_reason') or '').rstrip()} {extra}".strip()
+    merged["completion"] = max(task.get("completion", 0) for task in group)
+    urls = []
+    for task in group:
+        for url in task.get("seen_urls") or []:
+            if url not in urls:
+                urls.append(url)
+    merged["seen_urls"] = urls
+    return merged
+
+
+def _collapse_booked_calls(buckets: Dict[str, List[Dict[str, Any]]]) -> Dict[str, List[Dict[str, Any]]]:
+    """Gyro and Acme are two calls. Gyro twice is one call."""
+    roster_names = _roster_names()
+    collapsed: Dict[str, List[Dict[str, Any]]] = {}
+    for founder_key, tasks in buckets.items():
+        calls = [task for task in tasks if _is_call(task)]
+        rest = [task for task in tasks if task not in calls]
+        groups: List[List[Any]] = []
+        unnamed: List[Dict[str, Any]] = []
+        for task in calls:
+            tokens = _customer_tokens(_task_blob(task), roster_names)
+            if not tokens:
+                unnamed.append(task)
+                continue
+            placed = False
+            for group in groups:
+                if group[0] & tokens:
+                    group[0] |= tokens
+                    group[1].append(task)
+                    placed = True
+                    break
+            if not placed:
+                groups.append([tokens, [task]])
+        merged = [_merge_call_group(group[1], unnamed=False) for group in groups]
+        if unnamed:
+            merged.append(_merge_call_group(unnamed, unnamed=True))
+        collapsed[founder_key] = rest + merged
+    return collapsed
+
+
+def _drop_recent_repeats(
+    buckets: Dict[str, List[Dict[str, Any]]],
+    prior: Optional[List[Dict[str, Any]]],
+) -> Dict[str, List[Dict[str, Any]]]:
+    """A link, or the same person and customer and verb, does not score again for 7 days."""
+    if not prior:
+        return buckets
+    roster_names = _roster_names()
+    prior_urls = set()
+    prior_wins = set()
+    for item in prior:
+        if not isinstance(item, dict):
+            continue
+        text = str(item.get("text") or "")
+        founder = str(item.get("founder_key") or "")
+        for url in _urls(text):
+            prior_urls.add(url)
+        verb = _win_verb(text)
+        if verb and founder:
+            for token in _customer_tokens(text, roster_names):
+                prior_wins.add((founder, verb, token))
+
+    for founder, tasks in buckets.items():
+        for task in tasks:
+            if float(task.get("completion") or 0) <= 0:
+                continue
+            blob = _task_blob(task)
+            if set(_urls(blob)) & prior_urls:
+                task["completion"] = 0.0
+                task["complexity"] = 1
+                task["score_reason"] = "Already counted in the last 7 days."
+                continue
+            verb = _win_verb(blob)
+            tokens = _customer_tokens(blob, roster_names)
+            if verb and any((founder, verb, token) in prior_wins for token in tokens):
+                task["completion"] = 0.0
+                task["complexity"] = 1
+                task["score_reason"] = "Already counted in the last 7 days."
+    return buckets
+
+
+def _cap_booked_calls(buckets: Dict[str, List[Dict[str, Any]]]) -> Dict[str, List[Dict[str, Any]]]:
+    """The 4th booked call in one day counts at a quarter, same as a 4th tiny chore."""
+    for tasks in buckets.values():
+        seen = 0
+        for task in tasks:
+            if not _is_call(task) or float(task.get("completion") or 0) <= 0:
+                continue
+            seen += 1
+            if seen > 3:
+                task["stack_discount"] = 0.25
+                reason = str(task.get("score_reason") or "").rstrip()
+                task["score_reason"] = f"{reason} The 4th booked call in one day counts at a quarter.".strip()
+    return buckets
+
+
+def prior_from_scores(rows: Optional[List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
+    """Pull last week's scored lines. A zero line does not block a new one."""
+    prior = []
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        breakdown = row.get("breakdown_json") or {}
+        if isinstance(breakdown, str):
+            try:
+                breakdown = json.loads(breakdown)
+            except json.JSONDecodeError:
+                breakdown = {}
+        for task in breakdown.get("task_breakdown") or []:
+            if float(task.get("completion") or 0) <= 0:
+                continue
+            prior.append({
+                "founder_key": row.get("founder_key") or "",
+                "text": " ".join([
+                    str(task.get("task") or ""),
+                    str(task.get("evidence") or ""),
+                    " ".join(task.get("seen_urls") or []),
+                ]),
+            })
+    return prior
