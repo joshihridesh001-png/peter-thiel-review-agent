@@ -16,8 +16,8 @@ async def test_scheduler_runs_inquiry_callout():
         await cog.run_context_inquiry_callout("2026-10-12")
         assert channel.send.called
         call_args = channel.send.call_args[1]
-        assert "embed" in call_args
-        embed = call_args["embed"]
+        assert "embeds" in call_args
+        embed = call_args["embeds"][0]
         assert "7:15 PM Quick Context Check" in embed.title
         assert "Gyros client" in embed.fields[0].value
 

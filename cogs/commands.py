@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Optional, Literal
 
 from config import FOUNDERS
+from engine.impact import size_label
 from database.models import (
     update_founder_discord_id,
     get_all_users,
@@ -33,15 +34,15 @@ class CommandsCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @app_commands.command(name="set-role", description="Link a founder role to a Discord member")
+    @app_commands.command(name="set-role", description="Link a team role to a Discord member")
     @app_commands.describe(
-        role="Select the founder role",
+        role="Select the person",
         member="The Discord member to assign"
     )
     async def set_role(
         self,
         interaction: discord.Interaction,
-        role: Literal["hridesh", "swarit", "rahul"],
+        role: Literal["hridesh", "swarit", "rahul", "yash", "shivang"],
         member: discord.Member,
     ):
         """Associate Discord User ID with founder key."""
@@ -63,7 +64,7 @@ class CommandsCog(commands.Cog):
     async def view_goals(
         self,
         interaction: discord.Interaction,
-        founder: Literal["hridesh", "swarit", "rahul"],
+        founder: Literal["hridesh", "swarit", "rahul", "yash", "shivang"],
         date: Optional[str] = None,
     ):
         target_date = date or datetime.now().strftime("%Y-%m-%d")
@@ -111,7 +112,7 @@ class CommandsCog(commands.Cog):
     async def view_score(
         self,
         interaction: discord.Interaction,
-        founder: Literal["hridesh", "swarit", "rahul"],
+        founder: Literal["hridesh", "swarit", "rahul", "yash", "shivang"],
         date: Optional[str] = None,
     ):
         target_date = date or datetime.now().strftime("%Y-%m-%d")
@@ -135,9 +136,10 @@ class CommandsCog(commands.Cog):
                 task_desc = task_desc[:35] + "..."
             comp_pct = int(t.get("completion", 0.0) * 100)
             w = int(t.get("complexity", 3))
+            rubric = int(t.get("rubric_size", w))
             pts = t.get("task_points", 0.0)
             reason = t.get("score_reason", "").strip()
-            entry = f"• **{task_desc}** (Size: {w}/5, {comp_pct}% done) → **+{pts:.1f} pts**"
+            entry = f"• **{task_desc}** (Size: {size_label(w, rubric)}, {comp_pct}% done) → **+{pts:.1f} pts**"
             if reason:
                 if len(reason) > 75:
                     reason = reason[:72] + "..."
@@ -172,6 +174,8 @@ class CommandsCog(commands.Cog):
 
         for s in standings:
             key = s["founder_key"]
+            if not FOUNDERS.get(key, {}).get("on_cap_table", False):
+                continue
             name = s["display_name"]
             role = s["role"]
             vested = s["vested_equity"]
@@ -197,8 +201,8 @@ class CommandsCog(commands.Cog):
     async def leaderboard(self, interaction: discord.Interaction):
         users = await get_all_users()
         embed = discord.Embed(
-            title="🏆 Founder Execution Leaderboard",
-            description="Tracking daily consistency, role throughput, and execution momentum.",
+            title="🏆 Team Execution Leaderboard",
+            description="Daily streaks for the whole team. Everyone can see everyone.",
             color=COLOR_PRIMARY
         )
         for u in users:

@@ -20,7 +20,7 @@ async def generate_weekly_swot_with_ai(
     """
     system_prompt = """
 You are the Strategic Executive Advisor operating under Hridesh's Systems Thinking Framework.
-Analyze the last 7 days of founder execution data (CEO, CTO, COO) and produce a rigorous, depersonalized SWOT analysis.
+Analyze the last 7 days for every person in the input (CEO, CTO, COO, and Sales). Write one SWOT block per person. Use simple words a 10-year-old can read. No corporate buzzwords.
 
 Guidelines:
 1. Strengths: What systems and execution habits are performing with high velocity and consistency?
@@ -68,6 +68,18 @@ Input Data:
                 "weaknesses": "Context-switching between sales and marketing tasks.",
                 "opportunities": "Document and delegate routine SOPs.",
                 "threats": "Operational fatigue from high-frequency chore handling."
+            },
+            "yash": {
+                "strengths": "Calls and messages that start new customer talks.",
+                "weaknesses": "A call is easy to miss when there is no note after it.",
+                "opportunities": "Write down what the customer said after each call.",
+                "threats": "A quiet log looks like no work, even after a full day of calls."
+            },
+            "shivang": {
+                "strengths": "Follow-ups that keep a customer talk moving.",
+                "weaknesses": "A call is easy to miss when there is no note after it.",
+                "opportunities": "Write down what the customer said after each call.",
+                "threats": "A quiet log looks like no work, even after a full day of calls."
             }
         },
         "system_recommendations": [

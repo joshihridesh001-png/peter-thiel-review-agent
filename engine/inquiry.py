@@ -7,6 +7,7 @@ unbacked claims, or bare file drops, and generates at most 1 direct question per
 import json
 import logging
 import asyncio
+from datetime import datetime
 from typing import Dict, Any, List
 from config import FOUNDERS
 from database.models import get_goals_for_date, get_updates_for_date_range
@@ -49,7 +50,9 @@ async def generate_pre_scoring_inquiries(score_date: str) -> Dict[str, str]:
     if not client:
         return {}
 
-    start_time = f"{score_date}T05:00:00"
+    # Same start as the 8:00 PM card, so a note from last night is visible here too.
+    from cogs.scheduler import score_window
+    start_time, _window_end = score_window(datetime.strptime(score_date, "%Y-%m-%d").date())
     end_time = f"{score_date}T19:15:00"
 
     candidate_models = [

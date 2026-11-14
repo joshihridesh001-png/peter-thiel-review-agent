@@ -71,6 +71,7 @@ def compute_daily_score(
             "task_points": round(task_points, 2),
             "evidence": t.get("evidence_snippet", ""),
             "score_reason": t.get("score_reason", t.get("evidence_snippet", "")),
+            "rubric_size": int(t.get("rubric_size", w)),
         })
 
     # Calculate peer factor
