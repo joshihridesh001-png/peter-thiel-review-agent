@@ -6,6 +6,7 @@ Provides high-level async functions to interact with the SQLite database.
 import json
 from datetime import datetime
 from typing import Optional, List, Dict, Any
+from config import FOUNDERS
 from database.db import get_db
 
 
@@ -85,6 +86,29 @@ async def save_channel_update(
         """, (message_id, founder_key, discord_user_id, channel_id, content, timestamp))
         await db.commit()
         return cursor.lastrowid or 0
+
+
+async def upsert_channel_update(
+    message_id: int,
+    founder_key: str,
+    discord_user_id: int,
+    channel_id: int,
+    content: str,
+    timestamp: str,
+) -> None:
+    """Insert a note, or replace it when the person edits the Discord message."""
+    async with get_db() as db:
+        await db.execute("""
+            INSERT INTO updates (message_id, founder_key, discord_user_id, channel_id, content, timestamp)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(message_id) DO UPDATE SET
+                founder_key = excluded.founder_key,
+                discord_user_id = excluded.discord_user_id,
+                channel_id = excluded.channel_id,
+                content = excluded.content,
+                timestamp = excluded.timestamp;
+        """, (message_id, founder_key, discord_user_id, channel_id, content, timestamp))
+        await db.commit()
 
 
 async def get_updates_for_date_range(founder_key: str, start_iso: str, end_iso: str) -> List[Dict[str, Any]]:
@@ -320,7 +344,7 @@ async def get_recent_founder_context(days: int = 3) -> str:
             FROM daily_scores
             ORDER BY score_date DESC, id DESC
             LIMIT ?;
-        """, (days * 3,)) as cursor:
+        """, (days * len(FOUNDERS),)) as cursor:
             score_rows = await cursor.fetchall()
 
     if not score_rows:

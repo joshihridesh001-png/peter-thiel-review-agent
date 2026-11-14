@@ -4,12 +4,22 @@ Central Configuration for the Krishna Engineering OS Founder Operations Bot.
 
 import os
 from pathlib import Path
+from typing import Optional
 from dotenv import load_dotenv
 
 import zoneinfo
 
 # Load .env if present
 load_dotenv()
+
+
+def discord_id_from_env(env_name: str, default: str = "") -> Optional[int]:
+    """Return a Discord snowflake. Missing and 0 become None so two people can both be unknown."""
+    raw = os.getenv(env_name, "").strip() or (default or "").strip()
+    if not raw.isdigit():
+        return None
+    value = int(raw)
+    return value or None
 
 # Timezone (defaults to Asia/Kolkata for IST schedule)
 TIMEZONE_STR = os.getenv("TZ", "Asia/Kolkata")
@@ -73,6 +83,7 @@ SYSTEM_EMBED_TITLES = {
     "Commitment Lock",
     "Monthly Equity Evolution",
     "Strategic Executive SWOT",
+    "Weekly Team Report",
     "Cloud Deployment Live",
 }
 
@@ -92,9 +103,11 @@ FOUNDERS = {
             "Key enterprise partnerships & high-stakes negotiations",
             "Team direction, systems architecture & bottleneck removal",
         ],
-        "discord_id": int(os.getenv("DISCORD_USER_HRIDESH", "1159464740788109312")),
+        "discord_id": discord_id_from_env("DISCORD_USER_HRIDESH", "1159464740788109312"),
         "usernames": ["hridesh_joshi", "hridesh", "joshihridesh001-png", "joshihridesh", "ceo"],
         "github_usernames": ["joshihridesh001-png", "joshihridesh"],
+        "on_cap_table": True,
+        "goal_line": "Big deals, investors, and company direction",
     },
     "swarit": {
         "display_name": "Swarit",
@@ -107,9 +120,11 @@ FOUNDERS = {
             "System reliability, uptime, and database performance",
             "Technical documentation, refactoring & security",
         ],
-        "discord_id": int(os.getenv("DISCORD_USER_SWARIT", "1419294391041921125")),
+        "discord_id": discord_id_from_env("DISCORD_USER_SWARIT", "1419294391041921125"),
         "usernames": ["swarit_soni", "swarit", "swarit-soni", "swaritsoni", "cto", "cto's assistant"],
         "github_usernames": ["swarit-soni", "swarit_soni", "swaritsoni"],
+        "on_cap_table": True,
+        "goal_line": "Writing code, fixing bugs, and making the product work",
     },
     "rahul": {
         "display_name": "Rahul",
@@ -122,9 +137,44 @@ FOUNDERS = {
             "Marketing campaign rhythm & growth delivery",
             "Cross-functional blocker clearing & team coordination",
         ],
-        "discord_id": int(os.getenv("DISCORD_USER_RAHUL", "1541842669922295980")),
+        "discord_id": discord_id_from_env("DISCORD_USER_RAHUL", "1541842669922295980"),
         "usernames": ["2muchmotion__", "2muchmotion", "rahul", "rahul's bitch", "coo"],
         "github_usernames": ["2muchmotion__", "2muchmotion", "rahul"],
+        "on_cap_table": True,
+        "goal_line": "Talking to customers, pilots, and daily operations",
+    },
+    # Sales reps are scored on the daily card. They are not on the 24-month earnout.
+    "yash": {
+        "display_name": "Yash",
+        "role": "Sales",
+        "vested_equity": 0.0,
+        "unvested_target": 0.0,
+        "on_cap_table": False,
+        "goal_line": "Calls and messages that start new customer talks",
+        "dharma_focus": [
+            "US cold calls and follow-ups",
+            "LinkedIn and WhatsApp messages to possible customers",
+            "Meta lead follow-up and booking pilots",
+        ],
+        "discord_id": discord_id_from_env("DISCORD_USER_YASH", "923595474454323281"),
+        "usernames": ["yash", "yyash", "yy4sh", "yashaggarwal", "yash_aggarwal", "yash.aggarwal"],
+        "github_usernames": [],
+    },
+    "shivang": {
+        "display_name": "Shivang",
+        "role": "Sales",
+        "vested_equity": 0.0,
+        "unvested_target": 0.0,
+        "on_cap_table": False,
+        "goal_line": "Follow-ups that keep a customer talk moving",
+        "dharma_focus": [
+            "Customer follow-ups after the first call",
+            "Notes, lists, or recordings from those talks",
+            "Booking the next conversation",
+        ],
+        "discord_id": discord_id_from_env("DISCORD_USER_SHIVANG", "665573807494529065"),
+        "usernames": ["shivang", "shivang2468"],
+        "github_usernames": [],
     },
 }
 

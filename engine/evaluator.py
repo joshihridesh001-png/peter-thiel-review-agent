@@ -12,6 +12,9 @@ from config import GEMINI_API_KEY, FOUNDERS, ROLE_DHARMA_RANGE, COMPLEXITY_RANGE
 
 logger = logging.getLogger(__name__)
 
+# Who did the work is decided in engine/credit.py. This fallback only
+# keeps a task name so the night still produces a card.
+
 # Try importing the new google-genai SDK
 try:
     from google import genai
@@ -169,7 +172,8 @@ Calcrum is an automated finance system that connects to bank accounts and organi
 Who owns what:
 - Hridesh (CEO): Built the core engine and bank adapters first. His main job: big strategy, bringing in money/investors, and leading the team.
 - Swarit (CTO): Main job: writing code, fixing bugs, and making sure the website and servers never crash.
-- Rahul (COO): Main job: finding customers (like Gyros Farm, Gramiyaa), running sales, and getting pilots live.
+- Rahul (COO): Main job: finding customers (like Gyro Farms, Gramiyaa), running sales, and getting pilots live.
+- Yash (Sales) and Shivang (Sales): Sales reps on the team, not founders. Their main job: cold calls, follow-ups, and notes that start customer talks. A call only counts when there is a note, list, or recording. Do not give them credit for ads or for code. Do not give them equity.
 
 How to judge what really happened (DO NOT GET FOOLED BY FANCY TALK):
 1. Building real code vs writing notes vs just chatting:
@@ -204,10 +208,10 @@ Instructions:
 1. If they had a plan, score each task from 0.0 (didn't do it) to 1.0 (completely finished) based on real proof.
 2. If they had NO plan, find 2 to 4 real things they actually did from their updates.
 3. If they posted nothing, return an empty task list and 0 bonus.
-4. If they jumped in to fix a sudden big emergency without being asked, give them a "spontaneous_bonus" (0.0 to 5.0) and explain why in super simple words ("spontaneous_reason").
-5. In "praise_text": Tell them what they did great in plain English a 10-year-old can understand.
-6. In "feedback_text": Give simple, honest advice on where they can do better tomorrow.
-7. In "mentor_question": Ask ONE simple, punchy question for tomorrow that a 10-year-old would easily get.
+4. Set "spontaneous_bonus" to 0. The size is already decided. A number in the sentence, like 5 connection requests, is not the size.
+5. In "praise_text": Name only the scored lines below. Do not describe a bigger result than the line states.
+6. In "feedback_text": Give simple, honest advice. If a line says there is no proof, do not call that work finished.
+7. In "mentor_question": Ask ONE simple question about those same lines.
 
 Return valid JSON with schema:
 {{
@@ -286,12 +290,16 @@ Return valid JSON with schema:
 
     if locked_goals:
         for g in locked_goals:
-            comp = 0.85 if has_updates else 0.0
-            reason = "Saw active progress and messages about this in chat today." if has_updates else "No messages or proof found in chat today."
+            if not has_updates:
+                comp = 0.0
+                reason = "No messages or proof found in chat today."
+            else:
+                comp = 0.0
+                reason = "Credit decides who did this work. This step does not award the build."
             evaluations.append({
                 "task": g.get("task", ""),
                 "completion": comp,
-                "evidence_snippet": "Verified activity from channel updates" if has_updates else "No activity recorded",
+                "evidence_snippet": "No activity recorded" if not has_updates else "Left for the credit step",
                 "complexity": max(1, min(5, int(g.get("complexity", 3)))),
                 "dharma_multiplier": max(0.8, min(1.2, float(g.get("dharma_multiplier", 1.0)))),
                 "score_reason": reason,
@@ -304,7 +312,7 @@ Return valid JSON with schema:
             if len(cleaned) < 5 or cleaned in seen_topics:
                 continue
             seen_topics.add(cleaned)
-            comp = 1.0
+            comp = 0.0
             complexity = 3
             dharma = 1.0
 
@@ -336,7 +344,7 @@ Return valid JSON with schema:
                 "evidence_snippet": cleaned[:100],
                 "complexity": complexity,
                 "dharma_multiplier": dharma,
-                "score_reason": f"Activity confirmed in chat: {cleaned[:60]}",
+                "score_reason": "Credit decides who did this work. This step does not award the build.",
             })
             if len(evaluations) >= 4:
                 break
@@ -350,6 +358,10 @@ Return valid JSON with schema:
         critique = "Talking to people is good, but getting them to actually use the product and pay is what matters. Focus on getting real customer sign-ups."
         praise = "Great hustle reaching out to customers and keeping things running today!"
         m_q = "When is your next customer going to try out the product?"
+    elif role == "Sales":
+        critique = "A call only counts when you write down what the customer said. A quiet log looks like a day with no work."
+        praise = "Great job starting real customer talks and leaving a note after them."
+        m_q = "Which customer talk today has a note, a list, or a recording?"
     else:
         critique = "Don't get stuck doing tiny chores. Your main job is leading the company, bringing in money, and helping the team move fast."
         praise = "Great leadership and keeping the whole team focused on what matters today!"

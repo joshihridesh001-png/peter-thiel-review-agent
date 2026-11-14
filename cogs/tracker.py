@@ -23,12 +23,14 @@ from database.models import (
     get_user_by_discord_id,
     save_daily_goals,
     save_channel_update,
+    upsert_channel_update,
     record_peer_reaction,
     remove_peer_reaction,
     get_all_users,
 )
 from engine.evaluator import parse_daily_goals_with_ai
 from engine.attachment_reader import enrich_discord_message
+from engine.impact import has_finished_verb, reports_finished_work
 from skills_bridge.discord_bridge import build_embed, COLOR_SUCCESS, COLOR_PRIMARY
 
 logger = logging.getLogger(__name__)
@@ -132,37 +134,228 @@ class TrackerCog(commands.Cog):
 
         return results
 
-    def _resolve_founder_key(self, author_id: int, author_name: str, is_bot: bool = False) -> Optional[str]:
-        """Match author to one of the 3 founders (Hridesh, Swarit, Rahul), including assistant bots."""
-        lower_name = author_name.lower().strip()
+    def _resolve_founder_key(
+        self,
+        author_id: int,
+        author_name: str,
+        display_name: str = "",
+        is_bot: bool = False,
+        global_name: str = "",
+        nick: str = "",
+    ) -> Optional[str]:
+        """Match an author to a team member, including assistant bots.
+
+        A server nick must not hide the account. Username, global name,
+        nick, and display name are all checked. yy4sh is Yash.
+        """
+        seen = set()
+        parts = []
+        for part in (author_name, global_name, display_name, nick):
+            text = str(part or "").strip().lower()
+            if text and text not in seen:
+                seen.add(text)
+                parts.append(text)
+        names = " ".join(parts)
 
         # 1. Bot messages attribution
         if is_bot:
             # Peter Thiel bot is Hridesh's personal assistant dropping sales & ops updates
-            if "peter thiel" in lower_name or "ceo" in lower_name or (self.bot.user and author_id == self.bot.user.id):
+            bot_user = self.bot.user if self.bot is not None else None
+            if "peter thiel" in names or "ceo" in names or (bot_user and author_id == bot_user.id):
                 return "hridesh"
-            if "rahul" in lower_name or "coo" in lower_name:
+            if "rahul" in names or "coo" in names:
                 return "rahul"
-            if "swarit" in lower_name or "cto" in lower_name:
+            if "swarit" in names or "cto" in names:
                 return "swarit"
+            if "shivang" in names:
+                return "shivang"
+            if "yash" in names:
+                return "yash"
 
-        # 2. Direct Discord ID match
+        # 2. Direct Discord ID match. Missing and 0 are not real accounts.
         for key, info in FOUNDERS.items():
-            if author_id == info.get("discord_id"):
+            known_id = info.get("discord_id") or 0
+            if known_id and author_id == known_id:
                 return key
 
-        # 3. Known username / alias match
+        # 3. Known username / alias match against the handle and the display name
         for key, info in FOUNDERS.items():
             for alias in info.get("usernames", []):
-                if alias.lower() in lower_name:
+                if alias and alias.lower() in names:
                     return key
 
         # 4. Key substring match
         for key in FOUNDERS.keys():
-            if key in lower_name:
+            if key in names:
                 return key
 
         return None
+
+    def _logged_channel_id(self, channel) -> Optional[int]:
+        """Parent channel when the message is in a thread under a watched channel."""
+        channel_id = getattr(channel, "id", None)
+        parent_id = getattr(channel, "parent_id", None)
+        if channel_id in MONITORED_UPDATE_CHANNELS:
+            return channel_id
+        if parent_id in MONITORED_UPDATE_CHANNELS:
+            return parent_id
+        return None
+
+    def _child_threads(self, channel) -> List:
+        raw = getattr(channel, "threads", None)
+        if isinstance(raw, (list, tuple)):
+            return list(raw)
+        return []
+
+    async def _archived_threads(self, channel):
+        """Old threads on a real Discord channel. Test doubles are skipped."""
+        if channel.__class__.__module__.split(".")[0] != "discord":
+            return
+        method = getattr(channel, "archived_threads", None)
+        if not callable(method):
+            return
+        try:
+            async for thread in method(limit=25):
+                yield thread
+        except Exception as exc:
+            logger.warning("Could not list old threads in %s: %s", getattr(channel, "id", "?"), exc)
+
+    async def _iter_history(self, channel, *, limit: int = 100, after=None, cap: Optional[int] = None):
+        """Walk history newest-first, then older pages, until the cap or the start."""
+        method = getattr(channel, "history", None)
+        if not callable(method):
+            return
+        remaining = cap if cap is not None else limit
+        before = None
+        while remaining > 0:
+            page = min(100, remaining)
+            kwargs = {"limit": page}
+            if after is not None:
+                kwargs["after"] = after
+            if before is not None:
+                kwargs["before"] = before
+            try:
+                iterator = method(**kwargs)
+            except TypeError:
+                if before is not None or after is not None:
+                    return
+                iterator = method(limit=page)
+            batch = []
+            async for message in iterator:
+                batch.append(message)
+            if not batch:
+                return
+            for message in batch:
+                yield message
+            remaining -= len(batch)
+            if len(batch) < page:
+                return
+            before = batch[-1]
+            created = getattr(batch[-1], "created_at", None)
+            if after is not None and created is not None and created <= after:
+                return
+
+    def _author_kwargs(self, author) -> dict:
+        return {
+            "display_name": getattr(author, "display_name", None) or "",
+            "global_name": getattr(author, "global_name", None) or "",
+            "nick": getattr(author, "nick", None) or "",
+            "is_bot": bool(getattr(author, "bot", False)),
+        }
+
+    def _mark_voice(self, message, content: str) -> str:
+        """A voice note with no typed words has to say so. It does not score."""
+        attachments = getattr(message, "attachments", None)
+        if not isinstance(attachments, (list, tuple)):
+            return content
+        for att in attachments:
+            filename = (getattr(att, "filename", "") or "").lower()
+            ctype = (getattr(att, "content_type", "") or "").lower()
+            is_voice = (
+                ctype.startswith("audio/")
+                or filename.endswith((".ogg", ".opus", ".m4a", ".wav"))
+                or "voice-message" in filename
+                or "voice_message" in filename
+            )
+            if is_voice and "voice note with no transcript" not in (content or "").lower():
+                content = (content + "\n[Voice note with no transcript]").strip()
+        return content
+
+    async def _readable_content(self, message) -> str:
+        content = (getattr(message, "content", "") or "").strip()
+        attachments = getattr(message, "attachments", None)
+        has_files = isinstance(attachments, (list, tuple)) and len(attachments) > 0
+        if has_files or not content:
+            try:
+                enriched = await enrich_discord_message(message, self.bot)
+                if enriched:
+                    content = enriched
+            except Exception as exc:
+                logger.warning("Could not read attachments on message %s: %s", getattr(message, "id", "?"), exc)
+        return self._mark_voice(message, content)
+
+    async def _text_channel(self, channel_id: int):
+        """Use the cache, then ask Discord. A missing cache entry used to skip the whole channel."""
+        channel = self.bot.get_channel(channel_id) if self.bot is not None else None
+        if channel is not None and hasattr(channel, "history"):
+            return channel
+        if self.bot is None:
+            return None
+        try:
+            channel = await self.bot.fetch_channel(channel_id)
+        except Exception as exc:
+            logger.warning(f"Could not open channel {channel_id}: {exc}")
+            return None
+        if channel is not None and hasattr(channel, "history"):
+            return channel
+        return None
+
+    def _message_time(self, message: discord.Message, fallback: datetime) -> str:
+        created = getattr(message, "created_at", None)
+        if created is not None and hasattr(created, "astimezone"):
+            return created.astimezone(TIMEZONE).isoformat()
+        return fallback.isoformat()
+
+    def _is_system_message(self, message: discord.Message) -> bool:
+        for embed in message.embeds or []:
+            title = embed.title or ""
+            if any(ignored in title for ignored in SYSTEM_EMBED_TITLES):
+                return True
+        return False
+
+    def _is_goal_declaration(self, content: str, channel_id: int, when: datetime, is_human: bool) -> bool:
+        """A plan for tomorrow. A note about work that already happened is not a plan.
+
+        "Today I sent 40 requests" and a sales list stay on the scorecard.
+        "Tomorrow" and a night list with no finished work still lock a plan.
+        """
+        if not is_human:
+            return False
+        text = content or ""
+        lower = text.lower().strip()
+        plan_start = lower.startswith((
+            "goal", "tomorrow", "!goal", "/goal", "targets", "commitment", "commitments",
+        ))
+        if reports_finished_work(text) and not plan_start:
+            # After 8 PM, a list in #daily-reports is tomorrow's plan unless it
+            # says the work already happened ("sent", "booked", "did").
+            night_plan = (
+                channel_id == PRIMARY_GOALS_CHANNEL_ID
+                and (when.hour >= 20 or when.hour <= 4)
+                and not has_finished_verb(text)
+            )
+            if not night_plan:
+                return False
+        is_goals_channel = channel_id == PRIMARY_GOALS_CHANNEL_ID
+        is_numbered_list = text.strip().startswith(("1.", "1)", "1 -", "- ", "* ", "• "))
+        is_nighttime = when.hour >= 20 or when.hour <= 4
+        return (
+            plan_start
+            or (is_goals_channel and (
+                is_numbered_list
+                or (is_nighttime and not text.startswith("<@") and len(text.splitlines()) >= 2)
+            ))
+        )
 
     async def sync_recent_channel_updates(self, limit: int = 100) -> int:
         """
@@ -172,46 +365,59 @@ class TrackerCog(commands.Cog):
         synced_count = 0
         now = datetime.now(TIMEZONE)
         for channel_id in MONITORED_UPDATE_CHANNELS:
-            channel = self.bot.get_channel(channel_id)
-            if not channel or not hasattr(channel, "history"):
+            channel = await self._text_channel(channel_id)
+            if channel is None:
                 continue
             try:
-                async for message in channel.history(limit=limit):
-                    # Check GitHub updates
-                    gh_updates = self._extract_github_updates(message)
-                    if gh_updates:
-                        for idx, (f_key, gh_content) in enumerate(gh_updates):
-                            effective_mid = message.id if idx == 0 else (message.id * 100 + idx)
-                            author_id = FOUNDERS[f_key].get("discord_id", message.author.id)
-                            msg_time = message.created_at.astimezone(TIMEZONE).isoformat() if hasattr(message.created_at, "astimezone") else now.isoformat()
-                            saved_id = await save_channel_update(
-                                message_id=effective_mid,
-                                founder_key=f_key,
-                                discord_user_id=author_id,
-                                channel_id=channel_id,
-                                content=gh_content,
-                                timestamp=msg_time,
-                            )
-                            if saved_id:
-                                synced_count += 1
-                                logger.info(f"Backfilled GitHub update for {f_key}: {gh_content[:50]}...")
-                    else:
-                        # Check normal human/bot updates
-                        f_key = self._resolve_founder_key(message.author.id, message.author.name, is_bot=message.author.bot)
-                        if f_key and not message.author.bot:
-                            content = await enrich_discord_message(message, self.bot)
-                            if content.strip() and channel_id != PRIMARY_GOALS_CHANNEL_ID:
-                                msg_time = message.created_at.astimezone(TIMEZONE).isoformat() if hasattr(message.created_at, "astimezone") else now.isoformat()
+                sources = [channel, *self._child_threads(channel)]
+                async for thread in self._archived_threads(channel):
+                    sources.append(thread)
+                for source in sources:
+                    async for message in self._iter_history(source, limit=limit):
+                        if self._is_system_message(message):
+                            continue
+                        # Check GitHub updates
+                        gh_updates = self._extract_github_updates(message)
+                        if gh_updates:
+                            for idx, (f_key, gh_content) in enumerate(gh_updates):
+                                effective_mid = message.id if idx == 0 else (message.id * 100 + idx)
+                                author_id = FOUNDERS[f_key].get("discord_id") or message.author.id
+                                msg_time = self._message_time(message, now)
                                 saved_id = await save_channel_update(
-                                    message_id=message.id,
+                                    message_id=effective_mid,
                                     founder_key=f_key,
-                                    discord_user_id=message.author.id,
+                                    discord_user_id=author_id,
                                     channel_id=channel_id,
-                                    content=content,
+                                    content=gh_content,
                                     timestamp=msg_time,
                                 )
                                 if saved_id:
                                     synced_count += 1
+                                    logger.info(f"Backfilled GitHub update for {f_key}: {gh_content[:50]}...")
+                        else:
+                            # Check normal human/bot updates
+                            f_key = self._resolve_founder_key(
+                                message.author.id,
+                                message.author.name,
+                                **self._author_kwargs(message.author),
+                            )
+                            own_bot = bool(self.bot and self.bot.user and message.author.id == self.bot.user.id)
+                            if f_key and not own_bot:
+                                content = await self._readable_content(message)
+                                posted_at = message.created_at.astimezone(TIMEZONE) if hasattr(message.created_at, "astimezone") else now
+                                is_goal = self._is_goal_declaration(content, channel_id, posted_at, not message.author.bot)
+                                if content.strip() and not is_goal:
+                                    msg_time = self._message_time(message, now)
+                                    saved_id = await save_channel_update(
+                                        message_id=message.id,
+                                        founder_key=f_key,
+                                        discord_user_id=message.author.id,
+                                        channel_id=channel_id,
+                                        content=content,
+                                        timestamp=msg_time,
+                                    )
+                                    if saved_id:
+                                        synced_count += 1
             except Exception as e:
                 logger.warning(f"Failed to sync history for channel {channel_id}: {e}")
         return synced_count
@@ -232,7 +438,8 @@ class TrackerCog(commands.Cog):
             if any(ignored in title for ignored in SYSTEM_EMBED_TITLES):
                 return
 
-        channel_id = message.channel.id
+        # A thread keeps its parent's channel id, or the reply is invisible.
+        channel_id = self._logged_channel_id(message.channel) or message.channel.id
         now = datetime.now(TIMEZONE)
 
         # 2. Check for GitHub webhook updates (PRs, commits, branches)
@@ -240,7 +447,7 @@ class TrackerCog(commands.Cog):
         if gh_updates and channel_id in MONITORED_UPDATE_CHANNELS:
             for idx, (f_key, gh_content) in enumerate(gh_updates):
                 effective_mid = message.id if idx == 0 else (message.id * 100 + idx)
-                author_id = FOUNDERS[f_key].get("discord_id", message.author.id)
+                author_id = FOUNDERS[f_key].get("discord_id") or message.author.id
                 msg_time = message.created_at.astimezone(TIMEZONE).isoformat() if hasattr(message.created_at, "astimezone") else now.isoformat()
                 await save_channel_update(
                     message_id=effective_mid,
@@ -257,13 +464,13 @@ class TrackerCog(commands.Cog):
         founder_key = self._resolve_founder_key(
             message.author.id,
             message.author.name,
-            is_bot=message.author.bot
+            **self._author_kwargs(message.author),
         )
 
         if not founder_key:
             return
 
-        content = await enrich_discord_message(message, self.bot)
+        content = self._mark_voice(message, await enrich_discord_message(message, self.bot))
 
         if not content.strip():
             return
@@ -273,19 +480,11 @@ class TrackerCog(commands.Cog):
             return
 
         # Goals can ONLY be declared by human founders, never by automated bots
-        is_human = not message.author.bot
-        is_goals_channel = channel_id == PRIMARY_GOALS_CHANNEL_ID
-        is_explicit_goal = content.lower().startswith(("goal", "tomorrow", "!goal", "/goal", "targets", "commitment", "commitments", "today"))
-        is_numbered_list = content.strip().startswith(("1.", "1)", "1 -", "- ", "* ", "• "))
-        is_nighttime = now.hour >= 20 or now.hour <= 4
-
-        # In primary goals channel, numbered lists, explicit keywords, or multi-line nighttime messages lock commitments
-        is_goal_declaration = is_human and (
-            is_explicit_goal
-            or (is_goals_channel and (
-                is_numbered_list
-                or (is_nighttime and not content.startswith("<@") and len(content.splitlines()) >= 2)
-            ))
+        is_goal_declaration = self._is_goal_declaration(
+            content,
+            channel_id,
+            now,
+            not message.author.bot,
         )
 
         if is_goal_declaration:
@@ -335,9 +534,61 @@ class TrackerCog(commands.Cog):
                 discord_user_id=message.author.id,
                 channel_id=channel_id,
                 content=content,
-                timestamp=now.isoformat(),
+                timestamp=self._message_time(message, now),
             )
             logger.info(f"Logged update from {founder_key} in channel {channel_id}: {content[:40]}...")
+
+    @commands.Cog.listener()
+    async def on_raw_message_edit(self, payload: discord.RawMessageUpdateEvent):
+        """An edited note replaces the saved one. The first draft is not a second score."""
+        if self.bot is None:
+            return
+        channel = self.bot.get_channel(payload.channel_id)
+        if channel is None:
+            try:
+                channel = await self.bot.fetch_channel(payload.channel_id)
+            except Exception:
+                return
+        logged_channel_id = self._logged_channel_id(channel)
+        if logged_channel_id is None:
+            return
+
+        message = getattr(payload, "cached_message", None) or getattr(payload, "message", None)
+        if message is None:
+            try:
+                message = await channel.fetch_message(payload.message_id)
+            except Exception:
+                return
+        if self._is_system_message(message):
+            return
+        if self._extract_github_updates(message):
+            return
+
+        founder_key = self._resolve_founder_key(
+            message.author.id,
+            message.author.name,
+            **self._author_kwargs(message.author),
+        )
+        if not founder_key:
+            return
+        own_bot = bool(self.bot.user and message.author.id == self.bot.user.id)
+        if own_bot:
+            return
+
+        content = self._mark_voice(message, await enrich_discord_message(message, self.bot))
+        if not content.strip():
+            return
+        posted_at = message.created_at.astimezone(TIMEZONE) if hasattr(message.created_at, "astimezone") else datetime.now(TIMEZONE)
+        if self._is_goal_declaration(content, logged_channel_id, posted_at, not message.author.bot):
+            return
+        await upsert_channel_update(
+            message_id=message.id,
+            founder_key=founder_key,
+            discord_user_id=message.author.id,
+            channel_id=logged_channel_id,
+            content=content,
+            timestamp=self._message_time(message, posted_at),
+        )
 
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):

@@ -124,3 +124,14 @@ async def test_evaluate_daily_execution_with_ai_fallback_on_exception_no_goals()
         # Should fallback to heuristic
         assert len(result["task_evaluations"]) >= 1
         assert "Merged PR #12" in result["task_evaluations"][0]["task"]
+        assert result["task_evaluations"][0]["completion"] == 0.0
+
+
+@pytest.mark.asyncio
+async def test_fallback_does_not_treat_unrelated_chat_as_a_finished_goal():
+    mock_client = MagicMock()
+    mock_client.models.generate_content.side_effect = Exception("API error")
+    with patch("engine.evaluator._get_client", return_value=mock_client):
+        goals = [{"task": "Call 10 leads", "complexity": 3, "dharma_multiplier": 1.0}]
+        result = await evaluate_daily_execution_with_ai("rahul", goals, "talked in chat about lunch")
+        assert result["task_evaluations"][0]["completion"] == 0.0

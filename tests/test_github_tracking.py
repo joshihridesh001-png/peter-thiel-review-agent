@@ -144,3 +144,31 @@ async def test_sync_recent_channel_updates():
         mock_save.assert_awaited()
         args, kwargs = mock_save.call_args
         assert kwargs["founder_key"] == "hridesh"
+
+
+@pytest.mark.asyncio
+async def test_sync_fetches_a_channel_that_is_not_cached():
+    bot = MagicMock()
+    bot.user = None
+    cog = TrackerCog(bot)
+    bot.get_channel.return_value = None
+
+    channel = MagicMock()
+    msg = make_mock_github_message(
+        title="[swarit-soni/calcrum] Pull request opened: #79 Overnight dev-team system",
+        author_name="joshihridesh001-png",
+        url="https://github.com/swarit-soni/calcrum/pull/79",
+        description="Full PR description."
+    )
+
+    async def fake_history(limit=100):
+        yield msg
+
+    channel.history = fake_history
+    bot.fetch_channel = AsyncMock(return_value=channel)
+
+    with patch("cogs.tracker.save_channel_update", new_callable=AsyncMock) as mock_save:
+        mock_save.return_value = 7
+        synced = await cog.sync_recent_channel_updates(limit=5)
+        assert synced > 0
+        bot.fetch_channel.assert_awaited()

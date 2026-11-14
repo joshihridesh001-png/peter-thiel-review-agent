@@ -4,11 +4,28 @@ Manages connections, schema initialization, and initial founder seed data.
 """
 
 import aiosqlite
-from typing import Optional
 from config import DB_PATH, FOUNDERS
 
 
 from contextlib import asynccontextmanager
+
+USERS_TABLE_SQL = """
+CREATE TABLE users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    founder_key TEXT UNIQUE NOT NULL,
+    discord_id INTEGER UNIQUE,
+    display_name TEXT NOT NULL,
+    role TEXT NOT NULL,
+    vested_equity REAL NOT NULL DEFAULT 0.0,
+    unvested_target REAL NOT NULL DEFAULT 0.0,
+    earned_equity REAL NOT NULL DEFAULT 0.0,
+    current_streak INTEGER NOT NULL DEFAULT 0,
+    longest_streak INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+"""
+
+DROPPED_ROSTER_KEYS = ("riya",)
 
 @asynccontextmanager
 async def get_db():
@@ -26,22 +43,8 @@ async def init_db() -> None:
         await db.execute("PRAGMA foreign_keys = ON;")
         await db.execute("PRAGMA journal_mode = WAL;")
 
-        # 1. Users Table
-        await db.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            founder_key TEXT UNIQUE NOT NULL,
-            discord_id INTEGER UNIQUE NOT NULL,
-            display_name TEXT NOT NULL,
-            role TEXT NOT NULL,
-            vested_equity REAL NOT NULL DEFAULT 0.0,
-            unvested_target REAL NOT NULL DEFAULT 0.0,
-            earned_equity REAL NOT NULL DEFAULT 0.0,
-            current_streak INTEGER NOT NULL DEFAULT 0,
-            longest_streak INTEGER NOT NULL DEFAULT 0,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-        """)
+        # 1. Users Table. discord_id may be NULL when we do not know it yet.
+        await db.execute("CREATE TABLE IF NOT EXISTS " + USERS_TABLE_SQL.split("CREATE TABLE ", 1)[1])
 
         # 2. Goals Table
         await db.execute("""
@@ -137,23 +140,82 @@ async def init_db() -> None:
         );
         """)
 
-        # Seed or sync founders into users table
-        for key, data in FOUNDERS.items():
-            await db.execute("""
-            INSERT INTO users (founder_key, discord_id, display_name, role, vested_equity, unvested_target, earned_equity)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(founder_key) DO UPDATE SET
-                discord_id = excluded.discord_id,
-                display_name = excluded.display_name,
-                role = excluded.role;
-            """, (
-                key,
-                data["discord_id"],
-                data["display_name"],
-                data["role"],
-                data["vested_equity"],
-                data["unvested_target"],
-                data["vested_equity"]  # CEO starts with 45% earned/vested, CTO/COO start at 0.0
-            ))
+        await migrate_users_discord_id(db)
+        await remove_dropped_roster(db)
+        await seed_users(db)
 
         await db.commit()
+
+
+async def migrate_users_discord_id(db) -> None:
+    """Rebuild users so an unknown Discord id is NULL, not a shared 0."""
+    cursor = await db.execute("PRAGMA table_info(users)")
+    columns = await cursor.fetchall()
+    discord_col = next((col for col in columns if col[1] == "discord_id"), None)
+    if discord_col is None or not discord_col[3]:
+        return
+
+    # foreign_keys cannot change inside an open transaction. Commit first.
+    await db.commit()
+    await db.execute("PRAGMA foreign_keys = OFF;")
+    # Keep other tables pointing at "users" while this table is rebuilt.
+    await db.execute("PRAGMA legacy_alter_table = ON;")
+    await db.execute("ALTER TABLE users RENAME TO users_old;")
+    await db.execute(USERS_TABLE_SQL)
+    await db.execute("""
+        INSERT INTO users (
+            id, founder_key, discord_id, display_name, role,
+            vested_equity, unvested_target, earned_equity,
+            current_streak, longest_streak, created_at
+        )
+        SELECT
+            id, founder_key, NULLIF(discord_id, 0), display_name, role,
+            vested_equity, unvested_target, earned_equity,
+            current_streak, longest_streak, created_at
+        FROM users_old;
+    """)
+    await db.execute("DROP TABLE users_old;")
+    seq_table = await db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'sqlite_sequence'")
+    if await seq_table.fetchone():
+        max_row = await (await db.execute("SELECT COALESCE(MAX(id), 0) FROM users")).fetchone()
+        await db.execute("DELETE FROM sqlite_sequence WHERE name IN ('users', 'users_old')")
+        await db.execute(
+            "INSERT INTO sqlite_sequence (name, seq) VALUES ('users', ?)",
+            (max_row[0],),
+        )
+    await db.commit()
+    await db.execute("PRAGMA legacy_alter_table = OFF;")
+    await db.execute("PRAGMA foreign_keys = ON;")
+
+
+async def remove_dropped_roster(db) -> None:
+    """Drop people who are no longer on the roster. Riya has no score history."""
+    cursor = await db.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+    tables = {row[0] for row in await cursor.fetchall()}
+    for key in DROPPED_ROSTER_KEYS:
+        for table in ("goals", "updates", "daily_scores", "monthly_equity_ledger"):
+            if table in tables:
+                await db.execute(f"DELETE FROM {table} WHERE founder_key = ?", (key,))
+        if "users" in tables:
+            await db.execute("DELETE FROM users WHERE founder_key = ?", (key,))
+
+
+async def seed_users(db) -> None:
+    """Insert the roster. A null id does not wipe a Discord id already saved by /set-role."""
+    for key, data in FOUNDERS.items():
+        await db.execute("""
+        INSERT INTO users (founder_key, discord_id, display_name, role, vested_equity, unvested_target, earned_equity)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(founder_key) DO UPDATE SET
+            discord_id = COALESCE(excluded.discord_id, users.discord_id),
+            display_name = excluded.display_name,
+            role = excluded.role;
+        """, (
+            key,
+            data.get("discord_id"),
+            data["display_name"],
+            data["role"],
+            data["vested_equity"],
+            data["unvested_target"],
+            data["vested_equity"],
+        ))
