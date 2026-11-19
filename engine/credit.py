@@ -10,7 +10,15 @@ import re
 from typing import Any, Dict, List, Optional
 
 from config import FOUNDERS
-from engine.impact import is_outreach, is_strong_url, proof_grade, scored_size, size_note, work_size
+from engine.impact import (
+    is_outreach,
+    is_strong_url,
+    proof_grade,
+    reports_finished_work,
+    scored_size,
+    size_note,
+    work_size,
+)
 
 # Talk about the work, with no file and no named teammate.
 _TALK_COMPLETION = 0.3
@@ -350,11 +358,16 @@ def _parse(raw: Dict[str, Any], roster_names: Dict[str, List[str]]) -> Optional[
     # A poke or a real clause can be all common words ("sent 5 requests", "booked two calls").
     if vague or (not topics and not proof and not is_outreach(text) and not _looks_like_job(text)):
         return None
+    names = _names_in(text, roster_names)
+    # "Yash take care of the leads" or "Yash has nothing to do" is talk about Yash.
+    # It is only his work when it says the work already happened, or there is proof.
+    if not proof and any(name != speaker for name in names) and not reports_finished_work(text):
+        return None
     return {
         "speaker": speaker,
         "text": text,
         "topics": topics,
-        "names": _names_in(text, roster_names),
+        "names": names,
         "self_claim": bool(_SELF.search(text) or _LEADING.search(text)),
         "proof_kind": proof,
         "github": _is_github(text),

@@ -119,6 +119,32 @@ def score_window(score_date):
     )
 
 
+def keeps_update(update: Dict[str, Any], score_date) -> bool:
+    """Should this note go on the card for score_date?
+
+    A note posted last night after 8:00 PM is the late report this card
+    exists to catch, so "Daily report 18 Nov" posted at 9:00 PM on the 18th
+    counts here. A note posted today that names yesterday's date is a recap
+    of a day that already had its card, so it stays off.
+    """
+    content = update.get("content") or ""
+    lower = content.lower()
+    if not content.strip():
+        return False
+    if "commitments locked" in lower or "[embed: 🔒" in lower:
+        return False
+    prev_date = score_date - timedelta(days=1)
+    posted = str(update.get("timestamp") or "")
+    posted_last_night = posted[:10] == prev_date.strftime("%Y-%m-%d")
+    if posted_last_night:
+        return True
+    prev_patterns = (
+        f"{prev_date.day} {prev_date.strftime('%b').lower()}",
+        prev_date.strftime("%Y-%m-%d"),
+    )
+    return not any(pattern in lower for pattern in prev_patterns)
+
+
 async def collect_score_cards(people, score_one):
     """Score each person. One failure still leaves the other cards."""
     cards = []
@@ -459,12 +485,6 @@ class SchedulerCog(commands.Cog):
         # Yesterday 8:00 PM through the end of today. A 9:00 PM sales log lands on the next card.
         start_time, end_time = score_window(target_date)
 
-        prev_date = target_date - timedelta(days=1)
-        prev_patterns = [
-            f"{prev_date.day} {prev_date.strftime('%b').lower()}",
-            f"{prev_date.strftime('%Y-%m-%d')}",
-        ]
-
         hist_context = await get_recent_founder_context(days=3)
 
         day_updates = []
@@ -475,13 +495,7 @@ class SchedulerCog(commands.Cog):
                 logger.exception("Could not load updates for %s", roster_key)
                 continue
             for update in raw_updates:
-                content = update.get("content") or ""
-                lower = content.lower()
-                if any(pattern in lower for pattern in prev_patterns):
-                    continue
-                if "commitments locked" in lower or "[embed: 🔒" in lower:
-                    continue
-                if content.strip():
+                if keeps_update(update, target_date):
                     day_updates.append(update)
 
         # One pass over the whole day. The speaker does not keep the build.
