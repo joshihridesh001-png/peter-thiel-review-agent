@@ -10,7 +10,7 @@ from discord import app_commands
 from datetime import datetime
 from typing import Optional, Literal
 
-from config import FOUNDERS
+from config import FOUNDERS, discord_ids_for
 from engine.impact import size_label
 from database.models import (
     update_founder_discord_id,
@@ -30,9 +30,30 @@ from skills_bridge.discord_bridge import (
 )
 
 
+def can_run_sensitive_command(discord_id: Optional[int]) -> bool:
+    """Hridesh, Swarit, and Rahul only. Sales and Harsh can read, not rewrite."""
+    if not discord_id:
+        return False
+    for key, info in FOUNDERS.items():
+        if info.get("on_cap_table") and int(discord_id) in discord_ids_for(key):
+            return True
+    return False
+
+
 class CommandsCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+
+    async def _blocked(self, interaction: discord.Interaction) -> bool:
+        """Stop the command. True means the caller is not allowed."""
+        user = interaction.user
+        if getattr(user, "bot", False) or not can_run_sensitive_command(getattr(user, "id", None)):
+            await interaction.response.send_message(
+                "Only Hridesh, Swarit, or Rahul can run that.",
+                ephemeral=True,
+            )
+            return True
+        return False
 
     @app_commands.command(name="set-role", description="Link a team role to a Discord member")
     @app_commands.describe(
@@ -46,6 +67,8 @@ class CommandsCog(commands.Cog):
         member: discord.Member,
     ):
         """Associate Discord User ID with founder key."""
+        if await self._blocked(interaction):
+            return
         await update_founder_discord_id(role, member.id)
         display_name = FOUNDERS[role]["display_name"]
         founder_role = FOUNDERS[role]["role"]
@@ -216,6 +239,8 @@ class CommandsCog(commands.Cog):
     @app_commands.command(name="calculate-today", description="Force-run 8:00 PM scoring calculation right now")
     async def calculate_today(self, interaction: discord.Interaction):
         """Allows testing or manual calculation."""
+        if await self._blocked(interaction):
+            return
         await interaction.response.defer()
         scheduler_cog = self.bot.get_cog("SchedulerCog")
         if not scheduler_cog:
@@ -229,6 +254,8 @@ class CommandsCog(commands.Cog):
     @app_commands.command(name="prompt-goals", description="Trigger the 9:00 PM goal callout right now")
     async def prompt_goals(self, interaction: discord.Interaction):
         """Allows testing goal callout embed."""
+        if await self._blocked(interaction):
+            return
         await interaction.response.defer()
         scheduler_cog = self.bot.get_cog("SchedulerCog")
         if not scheduler_cog:
@@ -241,7 +268,15 @@ class CommandsCog(commands.Cog):
     @app_commands.command(name="confirm-equity", description="Ratify a monthly equity ledger tranche")
     @app_commands.describe(month_index="The month number to ratify (1 to 24)")
     async def confirm_equity(self, interaction: discord.Interaction, month_index: int):
-        """Triple-confirmation governance gate."""
+        """A cap-table founder ratifies one month. Months are 1 to 24."""
+        if await self._blocked(interaction):
+            return
+        if month_index < 1 or month_index > 24:
+            await interaction.response.send_message(
+                "Month has to be from 1 to 24.",
+                ephemeral=True,
+            )
+            return
         await ratify_monthly_ledger(month_index)
         embed = discord.Embed(
             title="✅ Monthly Equity Ledger Ratified",
@@ -254,6 +289,8 @@ class CommandsCog(commands.Cog):
     @app_commands.describe(limit="Number of recent messages to inspect per channel (default 100)")
     async def sync_updates(self, interaction: discord.Interaction, limit: Optional[int] = 100):
         """Scan channels and backfill any missed GitHub PRs/commits or chat updates."""
+        if await self._blocked(interaction):
+            return
         await interaction.response.defer()
         tracker_cog = self.bot.get_cog("TrackerCog")
         if not tracker_cog:
