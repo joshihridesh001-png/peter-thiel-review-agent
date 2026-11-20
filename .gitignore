@@ -19,3 +19,7 @@ __pycache__/
 Thumbs.db
 .vscode/
 .idea/
+
+# Server-only folders
+venv/
+backups/
