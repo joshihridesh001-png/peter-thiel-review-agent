@@ -64,7 +64,6 @@ _OUTREACH = (
     "follow up",
     "followup",
     "outreach",
-    "requests",
 )
 # Past tense. "send the deck" is a plan. "sent the deck" is work that happened.
 _FINISHED_VERBS = re.compile(
