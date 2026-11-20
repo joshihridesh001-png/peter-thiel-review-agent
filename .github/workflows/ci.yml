@@ -1,0 +1,63 @@
+name: CI and Deploy
+
+# Tests run on every pull request and every push.
+# A push to main that passes the tests is deployed to the VPS.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# One deploy at a time. A newer push waits for the older one to finish.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run tests
+        env:
+          # config.py refuses to start without a token. Tests never log in.
+          DISCORD_BOT_TOKEN: ci-placeholder
+          # Blank on purpose so no test calls the live Gemini API.
+          GEMINI_API_KEY: ""
+        run: python -m pytest tests/ -q
+
+  deploy:
+    needs: test
+    # A merge to main, or "Run workflow" on main. Never a pull request, never a fork.
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Deploy to the VPS
+        env:
+          SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+          HOST: ${{ secrets.VPS_HOST }}
+          PORT: ${{ secrets.VPS_PORT }}
+        run: |
+          if [ -z "$SSH_KEY" ] || [ -z "$HOST" ]; then
+            echo "::error::Deploy secrets are not set. See docs/DEPLOY.md."
+            exit 1
+          fi
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/deploy_key ~/.ssh/known_hosts
+          # The key on the VPS can only run scripts/deploy.sh. The command here is ignored.
+          ssh -i ~/.ssh/deploy_key -p "${PORT:-22}" \
+            -o StrictHostKeyChecking=yes -o BatchMode=yes \
+            "root@$HOST" deploy "${{ github.sha }}"
