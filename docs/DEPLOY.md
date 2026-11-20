@@ -3,7 +3,7 @@
 ## How it works
 
 1. **Every pull request and push** runs the tests on GitHub (`.github/workflows/ci.yml`).
-2. **When something merges to `main` and the tests pass**, GitHub logs into the VPS and runs `scripts/deploy.sh`.
+2. **When something merges to `main` and the tests pass**, GitHub logs into the VPS. The key there can only run `/root/bin/peter-deploy` (a copy of `scripts/deploy-launcher.sh`), which fetches `main` and runs the **newest** `scripts/deploy.sh` from it. A fix to `deploy.sh` therefore takes effect on the very next deploy.
 3. `deploy.sh` backs up the database, pulls, installs, restarts, and checks the bot came back online. If it didn't, it rolls back to the previous commit.
 
 You see the result in the **Actions** tab on GitHub. A red ✗ on a deploy means the server was **not** changed, or was rolled back. GitHub emails you when that happens.
@@ -46,10 +46,16 @@ On the VPS:
 ssh-keygen -t ed25519 -f /root/.ssh/github_deploy -N "" -C github-deploy
 ```
 
-Allow that key to run **only** `deploy.sh`. It can't open a shell or run anything else:
+Install the launcher outside the repo, so a pull never changes it:
 
 ```bash
-echo "command=\"bash /root/peter-thiel-review-agent/scripts/deploy.sh\",no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty $(cat /root/.ssh/github_deploy.pub)" >> /root/.ssh/authorized_keys
+mkdir -p /root/bin && cp /root/peter-thiel-review-agent/scripts/deploy-launcher.sh /root/bin/peter-deploy
+```
+
+Allow that key to run **only** the launcher. It can't open a shell or run anything else:
+
+```bash
+echo "command=\"bash /root/bin/peter-deploy\",no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty $(cat /root/.ssh/github_deploy.pub)" >> /root/.ssh/authorized_keys
 ```
 
 Print the two values GitHub needs:
@@ -85,6 +91,26 @@ rm /root/.ssh/github_deploy
 
 Actions → **CI and Deploy** → **Run workflow** on `main`. Both jobs should go green, and the deploy log should say "Already on …" (nothing new to deploy) or "Deployed … Bot is online."
 
+### Switching an existing setup to the launcher
+
+Servers set up before the launcher existed run the `deploy.sh` copy on disk. To switch over (outside quiet hours), after the launcher is on `main` and deployed:
+
+```bash
+mkdir -p /root/bin && cp /root/peter-thiel-review-agent/scripts/deploy-launcher.sh /root/bin/peter-deploy
+```
+
+```bash
+bash -c "sed -i 's#bash /root/peter-thiel-review-agent/scripts/deploy.sh#bash /root/bin/peter-deploy#' /root/.ssh/authorized_keys"
+```
+
+```bash
+grep -o 'command="[^"]*"' /root/.ssh/authorized_keys
+```
+
+The last command should print `command="bash /root/bin/peter-deploy"`.
+
+The launcher itself never updates on its own. If it ever needs a change, copy it again with the first command.
+
 ### Turning it off
 
-Remove the `command="…deploy.sh"` line from `/root/.ssh/authorized_keys` on the VPS. Deploys then fail at login, and tests keep running.
+Remove the `command="…peter-deploy"` line from `/root/.ssh/authorized_keys` on the VPS. Deploys then fail at login, and tests keep running.
