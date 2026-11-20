@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 
 from config import FOUNDERS
 from engine.impact import (
+    github_artifact,
     is_outreach,
     is_strong_url,
     proof_grade,
@@ -206,7 +207,8 @@ def _urls(text: str) -> List[str]:
 
 def _is_github(text: str) -> bool:
     lower = (text or "").lower()
-    return any(tag in lower for tag in ("[github pr", "[github commit", "[github branch", "[github update"))
+    tagged = any(tag in lower for tag in ("[github pr", "[github commit", "[github branch", "[github update"))
+    return tagged and github_artifact(text)
 
 
 def _proof_kind(text: str) -> Optional[str]:
@@ -214,10 +216,11 @@ def _proof_kind(text: str) -> Optional[str]:
     if proof_grade(text) != "strong":
         return None
     lower = (text or "").lower()
-    if "[github commit" in lower or "/commit/" in lower:
-        return "commit"
-    if "[github pr" in lower or "/pull/" in lower:
-        return "pr"
+    if github_artifact(text):
+        if "/commit/" in lower:
+            return "commit"
+        if "/pull/" in lower:
+            return "pr"
     return "file"
 
 

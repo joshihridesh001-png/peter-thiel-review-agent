@@ -135,24 +135,32 @@ _FILE_EXTENSIONS = (
     ".mp4", ".mov",
 )
 _STRONG_MARKERS = (
-    "[github pr",
-    "[github commit",
-    "/pull/",
-    "/commit/",
     "screenshot",
     "attachment",
     "recording",
 ) + _FILE_EXTENSIONS
 
+# Only a real github.com pull or commit. evil.com/pull/1 is not proof.
+_GITHUB_ARTIFACT = re.compile(
+    r"https?://(?:www\.)?github\.com/[^\s)>\"']+/(?:pull|commit)/[^\s)>\"']+",
+    re.IGNORECASE,
+)
+
+
+def github_artifact(text: str) -> bool:
+    """True when the text links a pull request or commit on github.com."""
+    return bool(_GITHUB_ARTIFACT.search(text or ""))
+
 
 def proof_grade(text: str) -> str:
     """strong, link, or none.
 
-    A file, a screenshot, a recording, or a GitHub pull request unlocks the
-    real size. A bare link only confirms a poke.
+    A file, a screenshot, a recording, or a github.com pull request unlocks
+    the real size. A bare link only confirms a poke. The words "GitHub PR"
+    are not proof on their own.
     """
     blob = (text or "").lower()
-    if any(marker in blob for marker in _STRONG_MARKERS):
+    if github_artifact(text) or any(marker in blob for marker in _STRONG_MARKERS):
         return "strong"
     if "http://" in blob or "https://" in blob:
         return "link"
@@ -161,7 +169,7 @@ def proof_grade(text: str) -> str:
 
 def is_strong_url(url: str) -> bool:
     blob = (url or "").lower().split("?", 1)[0]
-    if "/pull/" in blob or "/commit/" in blob:
+    if github_artifact(url):
         return True
     return any(blob.endswith(ext) for ext in _FILE_EXTENSIONS)
 

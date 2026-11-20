@@ -37,33 +37,45 @@ from skills_bridge.discord_bridge import build_embed, COLOR_SUCCESS, COLOR_PRIMA
 logger = logging.getLogger(__name__)
 
 
+def _fold_name(text: str) -> str:
+    """Lowercase, and turn punctuation into spaces. "yyash𐕣" becomes "yyash"."""
+    return re.sub(r"[^a-z0-9]+", " ", (text or "").lower()).strip()
+
+
+def _alias_hit(alias: str, names: str) -> bool:
+    """Whole token only. "yash" does not match "yyash". "ceo" is too short."""
+    token = _fold_name(alias)
+    if len(token) < 4:
+        return False
+    return f" {token} " in f" {_fold_name(names)} "
+
+
+def _is_github_web_url(url: str) -> bool:
+    """The embed link has to be on github.com. A lookalike host does not count."""
+    raw = (url or "").strip()
+    return bool(re.match(r"https?://(?:www\.)?github\.com/\S+", raw, re.IGNORECASE))
+
+
 class TrackerCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
     def _resolve_github_username(self, name: str) -> Optional[str]:
-        """Match a GitHub username or alias to one of the founders."""
+        """Match a GitHub username as a whole token.
+
+        "png" is not Hridesh. "son" is not Swarit. The full handle is.
+        """
         if not name:
             return None
         clean = name.lower().strip()
-        # Direct match in github_usernames or usernames
+        folded = f" {_fold_name(clean)} "
         for key, info in FOUNDERS.items():
-            for gh in info.get("github_usernames", []):
-                if gh.lower() == clean:
-                    return key
-            for alias in info.get("usernames", []):
-                if alias.lower() == clean:
-                    return key
-
-        # Substring / fuzzy match
-        for key, info in FOUNDERS.items():
-            if key in clean:
-                return key
-            for gh in info.get("github_usernames", []):
-                if gh.lower() in clean or clean in gh.lower():
-                    return key
-            for alias in info.get("usernames", []):
-                if len(alias) >= 4 and alias.lower() in clean:
+            candidates = list(info.get("github_usernames") or []) + list(info.get("usernames") or [])
+            for alias in candidates:
+                token = _fold_name(alias)
+                if len(token) < 4:
+                    continue
+                if clean == alias.lower() or f" {token} " in folded:
                     return key
         return None
 
@@ -72,8 +84,11 @@ class TrackerCog(commands.Cog):
         Inspect message for GitHub webhook or bot activity.
         Returns a list of (founder_key, formatted_content).
         """
-        is_github = (
-            "github" in (message.author.name or "").lower()
+        # The official GitHub webhook is a bot named GitHub. Any other
+        # webhook, and any user with "github" in their name, is not proof.
+        author_name = (getattr(message.author, "name", "") or "").strip().lower()
+        is_github = author_name == "github" and (
+            bool(getattr(message.author, "bot", False))
             or bool(getattr(message, "webhook_id", None))
         )
         if not is_github or not message.embeds:
@@ -84,6 +99,8 @@ class TrackerCog(commands.Cog):
             title = getattr(e, "title", "") or ""
             desc = getattr(e, "description", "") or ""
             url = getattr(e, "url", "") or ""
+            if not _is_github_web_url(url):
+                continue
             author_obj = getattr(e, "author", None)
             author_name = (getattr(author_obj, "name", "") or "").strip()
 
@@ -165,30 +182,24 @@ class TrackerCog(commands.Cog):
                 if author_id in discord_ids_for(key):
                     return key
 
-        # 2. Other bots, matched by name
+        # 2. The Peter Thiel bot is Hridesh's assistant. Any other bot counts
+        #    only when its account id is on the roster. A bot named "ceo" is not him.
         if is_bot:
-            # Peter Thiel bot is Hridesh's personal assistant dropping sales & ops updates
             bot_user = self.bot.user if self.bot is not None else None
-            if "peter thiel" in names or "ceo" in names or (bot_user and author_id == bot_user.id):
+            if "peter thiel" in names or (bot_user and author_id == bot_user.id):
                 return "hridesh"
-            if "rahul" in names or "coo" in names:
-                return "rahul"
-            if "swarit" in names or "cto" in names:
-                return "swarit"
-            if "shivang" in names:
-                return "shivang"
-            if "yash" in names:
-                return "yash"
+            return None
 
-        # 3. Known username / alias match against the handle and the display name
-        for key, info in FOUNDERS.items():
+        # 3. Known username / alias, as a whole token. "ceo" is too short to count.
+        for _key, info in FOUNDERS.items():
             for alias in info.get("usernames", []):
-                if alias and alias.lower() in names:
-                    return key
+                if _alias_hit(alias, names):
+                    return _key
 
-        # 4. Key substring match
+        # 4. The roster key itself, as a whole token.
+        folded = f" {_fold_name(names)} "
         for key in FOUNDERS.keys():
-            if key in names:
+            if f" {key} " in folded:
                 return key
 
         return None
@@ -470,6 +481,12 @@ class TrackerCog(commands.Cog):
         )
 
         if not founder_key:
+            if channel_id in MONITORED_UPDATE_CHANNELS:
+                logger.info(
+                    "Skipped a note from unknown author %s in channel %s",
+                    getattr(message.author, "id", None),
+                    channel_id,
+                )
             return
 
         content = self._mark_voice(message, await enrich_discord_message(message, self.bot))
