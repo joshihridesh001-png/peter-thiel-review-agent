@@ -42,7 +42,7 @@ class CommandsCog(commands.Cog):
     async def set_role(
         self,
         interaction: discord.Interaction,
-        role: Literal["hridesh", "swarit", "rahul", "yash", "shivang"],
+        role: Literal["hridesh", "swarit", "rahul", "yash", "shivang", "harsh"],
         member: discord.Member,
     ):
         """Associate Discord User ID with founder key."""
@@ -64,7 +64,7 @@ class CommandsCog(commands.Cog):
     async def view_goals(
         self,
         interaction: discord.Interaction,
-        founder: Literal["hridesh", "swarit", "rahul", "yash", "shivang"],
+        founder: Literal["hridesh", "swarit", "rahul", "yash", "shivang", "harsh"],
         date: Optional[str] = None,
     ):
         target_date = date or datetime.now().strftime("%Y-%m-%d")
@@ -112,7 +112,7 @@ class CommandsCog(commands.Cog):
     async def view_score(
         self,
         interaction: discord.Interaction,
-        founder: Literal["hridesh", "swarit", "rahul", "yash", "shivang"],
+        founder: Literal["hridesh", "swarit", "rahul", "yash", "shivang", "harsh"],
         date: Optional[str] = None,
     ):
         target_date = date or datetime.now().strftime("%Y-%m-%d")

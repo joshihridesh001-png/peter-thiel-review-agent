@@ -174,6 +174,7 @@ Who owns what:
 - Swarit (CTO): Main job: writing code, fixing bugs, and making sure the website and servers never crash.
 - Rahul (COO): Main job: finding customers (like Gyro Farms, Gramiyaa), running sales, and getting pilots live.
 - Yash (Sales) and Shivang (Sales): Sales reps on the team, not founders. Their main job: cold calls, follow-ups, and notes that start customer talks. A call only counts when there is a note, list, or recording. Do not give them credit for ads or for code. Do not give them equity.
+- Harsh (Engineer): Engineer on the team, not a founder. Main job: writing code, fixing bugs, and shipping features with Swarit. Real proof is a pull request, a commit, or a screenshot. Do not give him equity.
 
 How to judge what really happened (DO NOT GET FOOLED BY FANCY TALK):
 1. Building real code vs writing notes vs just chatting:
@@ -350,7 +351,7 @@ Return valid JSON with schema:
                 break
 
     # Construct simple, clear coaching based on role
-    if role == "CTO":
+    if role in ("CTO", "Engineer"):
         critique = "Planning and talking is easy. The only thing that counts is code that is actually built and working. Focus on building the real product, not just writing notes about it."
         praise = "Great job building and shipping code today! Getting real things working is what matters."
         m_q = "How many pull requests or code changes did you actually finish today?"

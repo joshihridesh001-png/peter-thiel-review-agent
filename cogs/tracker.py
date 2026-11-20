@@ -18,6 +18,7 @@ from config import (
     FOUNDERS,
     PEER_EMOJIS,
     TIMEZONE,
+    discord_ids_for,
 )
 from database.models import (
     get_user_by_discord_id,
@@ -157,7 +158,14 @@ class TrackerCog(commands.Cog):
                 parts.append(text)
         names = " ".join(parts)
 
-        # 1. Bot messages attribution
+        # 1. A known Discord account wins over any name guess. This includes
+        #    second accounts and Rahul's assistant bot.
+        if author_id:
+            for key in FOUNDERS:
+                if author_id in discord_ids_for(key):
+                    return key
+
+        # 2. Other bots, matched by name
         if is_bot:
             # Peter Thiel bot is Hridesh's personal assistant dropping sales & ops updates
             bot_user = self.bot.user if self.bot is not None else None
@@ -171,12 +179,6 @@ class TrackerCog(commands.Cog):
                 return "shivang"
             if "yash" in names:
                 return "yash"
-
-        # 2. Direct Discord ID match. Missing and 0 are not real accounts.
-        for key, info in FOUNDERS.items():
-            known_id = info.get("discord_id") or 0
-            if known_id and author_id == known_id:
-                return key
 
         # 3. Known username / alias match against the handle and the display name
         for key, info in FOUNDERS.items():
