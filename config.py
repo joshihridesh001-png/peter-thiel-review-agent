@@ -185,17 +185,17 @@ FOUNDERS = {
         "vested_equity": 0.0,
         "unvested_target": 0.0,
         "on_cap_table": False,
-        "goal_line": "Writing code and fixing bugs with the team",
+        "goal_line": "Building MIOS and fixing bugs with the team",
         "dharma_focus": [
+            "MIOS: the internal marketing intelligence tool the marketing team uses",
             "Shipping product features & merging PRs",
             "Fixing bugs and keeping the product working",
-            "Code the team can build on",
         ],
         "discord_id": discord_id_from_env("DISCORD_USER_HARSH", "1569234883988037652"),
         # Harsh's second Discord account. Both are him.
         "alt_discord_ids": [1501813564699185174],
-        "usernames": ["harsh"],
-        "github_usernames": [],
+        "usernames": ["harsh", "hsharmaharshofficialin-hash"],
+        "github_usernames": ["hsharmaharshofficialin-hash"],
     },
 }
 
