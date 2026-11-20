@@ -30,6 +30,7 @@ from config import (
     MONTHLY_CLOSE_DAY,
     MONTHLY_CLOSE_HOUR,
     TIMEZONE,
+    discord_ids_for,
 )
 from engine.discord_budget import fit_embed, pack_embeds, pack_field_embeds
 from database.models import (
@@ -548,7 +549,7 @@ class SchedulerCog(commands.Cog):
                     "spontaneous_bonus": 0.0,
                 }
 
-            author_id = info.get("discord_id") or 0
+            author_id = discord_ids_for(key)
             score_data = compute_daily_score(
                 task_evaluations=tasks,
                 reactions=reactions,
@@ -659,6 +660,7 @@ class SchedulerCog(commands.Cog):
             "rahul": 0xE67E22,    # Orange
             "yash": 0x1ABC9C,     # Teal
             "shivang": 0x27AE60,  # Green
+            "harsh": 0x9B59B6,    # Purple
         }
 
         for rank_info in leaderboard_ranks:

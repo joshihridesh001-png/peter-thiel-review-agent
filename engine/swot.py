@@ -75,6 +75,12 @@ Input Data:
                 "opportunities": "Write down what the customer said after each call.",
                 "threats": "A quiet log looks like no work, even after a full day of calls."
             },
+            "harsh": {
+                "strengths": "Writing code and fixing bugs with the team.",
+                "weaknesses": "Work is easy to miss when there is no pull request or commit link.",
+                "opportunities": "Post the pull request link when a change is done.",
+                "threats": "A fix with no link looks like no work on the card."
+            },
             "shivang": {
                 "strengths": "Follow-ups that keep a customer talk moving.",
                 "weaknesses": "A call is easy to miss when there is no note after it.",

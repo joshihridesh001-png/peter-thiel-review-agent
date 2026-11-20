@@ -3,22 +3,35 @@ Krishna Engineering OS Mathematical Scoring Engine.
 Calculates daily scores, applies peer reaction modifiers, and filters against task-stuffing.
 """
 
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Iterable, Union
 from config import PEER_FACTOR_RANGE, PEER_EMOJIS, BONUS_POINTS_MAX
 
 
-def calculate_peer_multiplier(reactions: List[Dict[str, Any]], author_discord_id: int) -> Tuple[float, Dict[str, int]]:
+def _own_ids(author: Union[int, Iterable[int], None]) -> set:
+    """One id or all of a person's accounts. A second account is still you."""
+    if author is None:
+        return set()
+    if isinstance(author, int):
+        return {author} if author else set()
+    return {i for i in author if i}
+
+
+def calculate_peer_multiplier(
+    reactions: List[Dict[str, Any]],
+    author_discord_id: Union[int, Iterable[int], None],
+) -> Tuple[float, Dict[str, int]]:
     """
     Calculate M_peer multiplier based on co-founder emoji reactions.
-    Self-reactions are strictly excluded.
+    Self-reactions are strictly excluded, from any of the author's accounts.
     Clamped to [0.8, 1.2].
     """
     counts = {"✅": 0, "🔥": 0, "⚠️": 0}
     delta = 0.0
+    own = _own_ids(author_discord_id)
 
     for r in reactions:
         # Prevent self-reaction exploitation
-        if r.get("reactor_discord_id") == author_discord_id:
+        if r.get("reactor_discord_id") in own:
             continue
         emoji = r.get("emoji", "")
         if emoji in PEER_EMOJIS:
@@ -34,7 +47,7 @@ def calculate_peer_multiplier(reactions: List[Dict[str, Any]], author_discord_id
 def compute_daily_score(
     task_evaluations: List[Dict[str, Any]],
     reactions: List[Dict[str, Any]],
-    author_discord_id: int,
+    author_discord_id: Union[int, Iterable[int], None],
     spontaneous_bonus: float = 0.0,
 ) -> Dict[str, Any]:
     """

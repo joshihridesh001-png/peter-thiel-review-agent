@@ -138,6 +138,8 @@ FOUNDERS = {
             "Cross-functional blocker clearing & team coordination",
         ],
         "discord_id": discord_id_from_env("DISCORD_USER_RAHUL", "1541842669922295980"),
+        # Rahul's assistant bot sometimes posts his updates. Those are his.
+        "alt_discord_ids": [1543588738725052436],
         "usernames": ["2muchmotion__", "2muchmotion", "rahul", "rahul's bitch", "coo"],
         "github_usernames": ["2muchmotion__", "2muchmotion", "rahul"],
         "on_cap_table": True,
@@ -176,7 +178,33 @@ FOUNDERS = {
         "usernames": ["shivang", "shivang2468"],
         "github_usernames": [],
     },
+    # Engineer on the daily card. Not on the 24-month earnout.
+    "harsh": {
+        "display_name": "Harsh",
+        "role": "Engineer",
+        "vested_equity": 0.0,
+        "unvested_target": 0.0,
+        "on_cap_table": False,
+        "goal_line": "Writing code and fixing bugs with the team",
+        "dharma_focus": [
+            "Shipping product features & merging PRs",
+            "Fixing bugs and keeping the product working",
+            "Code the team can build on",
+        ],
+        "discord_id": discord_id_from_env("DISCORD_USER_HARSH", "1569234883988037652"),
+        # Harsh's second Discord account. Both are him.
+        "alt_discord_ids": [1501813564699185174],
+        "usernames": ["harsh"],
+        "github_usernames": [],
+    },
 }
+
+
+def discord_ids_for(founder_key: str) -> set:
+    """Every Discord account that belongs to this person, bots included."""
+    info = FOUNDERS.get(founder_key) or {}
+    ids = {info.get("discord_id")} | set(info.get("alt_discord_ids") or [])
+    return {i for i in ids if i}
 
 # ── Dynamic Earnout & Equity Parameters ───────────────────────────────────────
 TOTAL_UNVESTED_POOL = 55.0         # 25% (Swarit) + 30% (Rahul)

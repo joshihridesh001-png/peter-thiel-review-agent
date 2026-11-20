@@ -136,9 +136,9 @@ class TestDatabaseAndPersistence(unittest.IsolatedAsyncioTestCase):
     async def test_full_database_lifecycle(self):
         await init_db()
         users = await get_all_users()
-        self.assertEqual(len(users), 5)
+        self.assertEqual(len(users), 6)
         keys = {u["founder_key"] for u in users}
-        self.assertEqual(keys, {"hridesh", "swarit", "rahul", "yash", "shivang"})
+        self.assertEqual(keys, {"hridesh", "swarit", "rahul", "yash", "shivang", "harsh"})
 
         test_date = "2099-01-01"
         # 1. Goal saving
