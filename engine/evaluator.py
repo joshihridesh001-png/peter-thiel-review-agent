@@ -174,7 +174,7 @@ Who owns what:
 - Swarit (CTO): Main job: writing code, fixing bugs, and making sure the website and servers never crash.
 - Rahul (COO): Main job: finding customers (like Gyro Farms, Gramiyaa), running sales, and getting pilots live.
 - Yash (Sales) and Shivang (Sales): Sales reps on the team, not founders. Their main job: cold calls, follow-ups, and notes that start customer talks. A call only counts when there is a note, list, or recording. Do not give them credit for ads or for code. Do not give them equity.
-- Harsh (Engineer): Engineer on the team, not a founder. Main job: writing code, fixing bugs, and shipping features with Swarit. Real proof is a pull request, a commit, or a screenshot. Do not give him equity.
+- Harsh (Engineer): Engineer on the team, not a founder. Main job: building and running MIOS, the internal marketing intelligence tool the marketing team uses, plus writing code and fixing bugs with Swarit. Real proof is a pull request, a commit, or a screenshot. Do not give him equity.
 
 How to judge what really happened (DO NOT GET FOOLED BY FANCY TALK):
 1. Building real code vs writing notes vs just chatting:

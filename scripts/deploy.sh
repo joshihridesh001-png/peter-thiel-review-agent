@@ -104,7 +104,9 @@ venv/bin/python - "$BACKUP_FILE" <<'PY'
 import os, sqlite3, sys
 from pathlib import Path
 from dotenv import load_dotenv
-load_dotenv()
+# An explicit path. With no path, dotenv searches from the caller's file,
+# and code read from stdin has none, so it crashes.
+load_dotenv(".env")
 src = Path(os.getenv("DATA_DIR", ".")) / "founder_ops.db"
 if not src.exists():
     sys.exit(f"Database not found at {src}")

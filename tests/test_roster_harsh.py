@@ -70,3 +70,27 @@ def test_single_id_callers_still_work():
 def test_harsh_beating_every_founder_is_one_sentence():
     line = rep_beat_founders_line([("hridesh", 4.0), ("swarit", 5.0), ("rahul", 3.0), ("harsh", 6.0)])
     assert line == "Harsh finished 1.0 pts above every founder."
+
+
+def test_harshs_github_account_is_harsh():
+    cog = TrackerCog(bot=None)
+    assert cog._resolve_github_username("hsharmaharshofficialin-hash") == "harsh"
+
+
+def test_a_pull_request_by_harsh_counts_for_harsh():
+    from engine.credit import assign_credit
+
+    result = assign_credit([{
+        "founder_key": "hridesh",
+        "content": (
+            "[GitHub PR: Add MIOS campaign dashboard]\n"
+            "Author: hsharmaharshofficialin-hash\n"
+            "URL: https://github.com/calcrum/mios/pull/3"
+        ),
+    }])
+    assert result["harsh"][0]["completion"] == 1.0
+    assert "hridesh" not in result or all(t["completion"] == 0 for t in result["hridesh"])
+
+
+def test_mios_is_harshs_main_job():
+    assert any("MIOS" in line for line in FOUNDERS["harsh"]["dharma_focus"])
