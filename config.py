@@ -85,6 +85,7 @@ SYSTEM_EMBED_TITLES = {
     "Strategic Executive SWOT",
     "Weekly Team Report",
     "Cloud Deployment Live",
+    "Backup Alert",
 }
 
 # ── Founder Profiles & Initial Cap Table ──────────────────────────────────────
