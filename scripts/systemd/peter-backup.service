@@ -1,0 +1,11 @@
+[Unit]
+Description=Peter Thiel nightly off-site backup (encrypted, to Google Drive)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/root/peter-thiel-review-agent
+ExecStart=/bin/bash /root/peter-thiel-review-agent/scripts/backup.sh
+# A slow upload must not hang forever.
+TimeoutStartSec=30min
